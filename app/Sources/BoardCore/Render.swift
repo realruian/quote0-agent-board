@@ -39,6 +39,8 @@ struct Face: Hashable {
 
 public enum Fonts {
     static var arkPixel: String { Resources.directory.appendingPathComponent("fonts/ark-pixel-12px-proportional-zh_hans.otf").path }
+    static var zhengGe: String { Resources.directory.appendingPathComponent("fonts/ZhengGeDianHei-16.ttf").path }
+    static var chill: String { Resources.directory.appendingPathComponent("fonts/ChillBitmap_16px.ttf").path }
     static let hiraginoPath = "/System/Library/Fonts/Hiragino Sans GB.ttc"
 
     /// Newer macOS keeps PingFang in a downloadable-asset folder whose name changes
@@ -71,13 +73,23 @@ public enum Fonts {
              Face(path: hiraginoPath, family: "Hiragino Sans GB", style: "W6")),
             ("arkpixel", "方舟像素", Face(path: arkPixel, family: "Ark Pixel 12px Prop zh-Hans", style: "Regular"),
              Face(path: arkPixel, family: "Ark Pixel 12px Prop zh-Hans", style: "Regular")),
+            ("zhengge", "正格点黑", zhengGeFace, zhengGeFace),
+            ("chill", "寒蝉点阵体", chillFace, chillFace),
         ]
     }
+
+    private static var arkPixelFace: Face { Face(path: arkPixel, family: "Ark Pixel 12px Prop zh-Hans", style: "Regular") }
+    private static var zhengGeFace: Face { Face(path: zhengGe, family: "ZhengGeDianHei 16", style: "Regular") }
+    private static var chillFace: Face { Face(path: chill, family: "寒蝉点阵体", style: "16px") }
 
     // Pixel fonts are drawn dot by dot for one size and are only sharp at whole multiples
     // of it. A role keeps to a multiple when one is close to its size; otherwise it is drawn
     // at its own size, with uneven strokes, rather than visibly smaller than other fonts.
-    static let pixelUnit = ["arkpixel": 12]
+    // The two drawn for 16 dots take the small text from the one drawn for 12, so every
+    // role has a size it is sharp at.
+    static var pixelFaces: [String: [(unit: Int, face: Face)]] {
+        ["arkpixel": [(12, arkPixelFace)], "zhengge": [(12, arkPixelFace), (16, zhengGeFace)], "chill": [(12, arkPixelFace), (16, chillFace)]]
+    }
     static let pixelSnap = 0.85  // how far below a role's size a multiple may fall and still be used
 
     // Used when the chosen family is not installed, so a frame can always be drawn:
@@ -88,9 +100,12 @@ public enum Fonts {
          Face(path: arkPixel, family: "Ark Pixel 12px Prop zh-Hans", style: "Regular")]
     }
 
-    // Drawn in place of single characters the chosen font has no glyph for. The bundled
-    // pixel font lacks about one common Chinese character in twenty.
-    static var substitutes: [Face] { [fallbacks[0], fallbacks[1], families[0].regular] }
+    // Drawn in place of single characters the chosen font has no glyph for. The pixel font
+    // drawn for 12 dots lacks about one common Chinese character in twenty. A pixel font
+    // looks first to the one with the most characters, at the sizes that one is sharp at.
+    static func substitutes(_ family: String, size: Int) -> [Face] {
+        (pixelFaces[family] != nil && size % 16 == 0 ? [chillFace] : []) + [fallbacks[0], fallbacks[1], families[0].regular]
+    }
 
     public static func available() -> [(key: String, label: String)] {
         families.filter { FileManager.default.fileExists(atPath: $0.regular.path) }.map { ($0.key, $0.label) }
@@ -126,12 +141,17 @@ public enum Fonts {
     /// The face for a role in the chosen family, or the first fallback that is installed.
     static func load(_ family: String, size: Int, bold: Bool) -> CTFont {
         var size = size
-        if let unit = pixelUnit[family] {
-            let sharp = max(1, Int((Double(size) / Double(unit)).rounded())) * unit
-            if Double(sharp) >= Double(size) * pixelSnap { size = sharp }
+        var drawn: Face?
+        if let faces = pixelFaces[family] {
+            // The face whose multiple comes nearest the role's size; of two as near, the one enlarged less.
+            let sharp = faces.map { (face: $0.face, size: max(1, Int((Double(size) / Double($0.unit)).rounded())) * $0.unit, unit: $0.unit) }
+                .filter { Double($0.size) >= Double(size) * pixelSnap }
+                .min { (abs($0.size - size), $0.size / $0.unit) < (abs($1.size - size), $1.size / $1.unit) }
+            drawn = sharp?.face
+            if let sharp = sharp { size = sharp.size }
         }
         let chosen = families.first { $0.key == family } ?? families[2]
-        for face in [bold ? chosen.bold : chosen.regular] + fallbacks {
+        for face in [drawn ?? (bold ? chosen.bold : chosen.regular)] + fallbacks {
             if let font = font(face, size: size) { return font }
         }
         return CTFontCreateWithName("Helvetica" as CFString, CGFloat(size), nil)  // every Mac has it; Chinese will not show
@@ -246,7 +266,7 @@ private final class Canvas {
             var face = font
             if !CTFontGetGlyphsForCharacters(font, units, &found, units.count) && !character.isWhitespace {
                 // The chosen font has no drawing for this character: take it from the first substitute that has.
-                for candidate in Fonts.substitutes {
+                for candidate in Fonts.substitutes(family, size: size) {
                     guard let other = Fonts.font(candidate, size: size) else { continue }
                     var theirs = [CGGlyph](repeating: 0, count: units.count)
                     if CTFontGetGlyphsForCharacters(other, units, &theirs, units.count) {

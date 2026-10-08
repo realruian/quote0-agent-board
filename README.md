@@ -205,7 +205,7 @@ python3 install.py --device <设备序列号>
 
 设置改完自动保存、立即生效，存在 `~/.quote0-agent-board/config.json`。端口在这个文件的 `web_port` 里改，改完需要重启后台进程。
 
-字体只列出本机有的：苹方（默认）、MiSans、冬青黑体，以及随项目附带的方舟像素字体。屏幕没有灰度，文字不做抗锯齿，所以不同字体的笔画粗细会有差别。所选字体缺某个字时，这个字自动用冬青黑体补上，不会显示成方框；方舟像素目前缺约二十分之一的常用字（例如“然”“热”“鉴”）。
+字体只列出本机有的：苹方（默认）、MiSans、冬青黑体，以及随项目附带的方舟像素字体。屏幕没有灰度，文字不做抗锯齿，所以不同字体的笔画粗细会有差别。Swift 版 App 另外附带两个按 16 像素画的点阵字体：正格点黑和寒蝉点阵体。选它们时对话名称一个点对一个像素，笔画是 1 像素宽，最锐利也最细；小字和整屏提醒的大字仍用方舟像素。所选字体缺某个字时，这个字自动用冬青黑体补上，不会显示成方框；方舟像素目前缺约二十分之一的常用字（例如“然”“热”“鉴”）。
 
 ## 剩余额度
 
@@ -307,10 +307,10 @@ AGENT_BOARD_HOME="$PWD/.dev-home" AGENT_BOARD_DRY_RUN=1 AGENT_BOARD_PORT=8766 py
 ## 致谢与声明
 
 - 功能设计参考了 [Vibe Island](https://vibeisland.app)。
-- 随项目附带的像素字体是 [方舟像素字体](https://github.com/TakWolf/ark-pixel-font)，按 SIL OFL 1.1 许可分发，许可全文在 `agent_board/fonts/ark-pixel-OFL.txt`。
+- 随项目附带的像素字体是 [方舟像素字体](https://github.com/TakWolf/ark-pixel-font)、[正格点黑 16](https://github.com/yzdnn/ZhengGeDianHei-16) 和 [寒蝉点阵体 16px](https://github.com/Warren2060/ChillBitmap)，都按 SIL OFL 1.1 许可分发，许可全文在 `agent_board/fonts/` 里各自的文件中。
 - Swift 版窗口里的图标来自 [Hugeicons](https://hugeicons.com) 的免费图标集，按 MIT 许可分发，许可全文在 `app/Hugeicons-LICENSE.md`。
 - 这是个人项目，和 MindReset、Anthropic、OpenAI、Vibe Island 都没有关联。屏幕上的 Agent 图标只用来标识对应的产品，App 图标里的锯齿圆形取自 Dot. App 的图标，表示它运行在 Dot. 的设备上；相关名称和标志归各自的所有者。
 
 ## 许可证
 
-[MIT](LICENSE)。随项目附带的方舟像素字体不在此列，它按 SIL OFL 1.1 分发。
+[MIT](LICENSE)。随项目附带的三个像素字体不在此列，它们按 SIL OFL 1.1 分发。

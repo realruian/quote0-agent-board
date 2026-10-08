@@ -97,6 +97,12 @@ final class ViewTests: BoardTestCase {
     func testPixelFontIsNeverMuchSmallerThanTheOtherFonts() {
         let sizes = [12, 16, 20, 36].map { Int(CTFontGetSize(Fonts.load("arkpixel", size: $0, bold: true))) }
         XCTAssertEqual(sizes, [12, 16, 24, 36])  // a sharp multiple when one is near
+        // a family drawn for 16 dots is sharp at every role: the names are its own, the rest come from the one drawn for 12
+        for family in ["zhengge", "chill"] {
+            let fonts = [12, 16, 20, 36].map { Fonts.load(family, size: $0, bold: true) }
+            XCTAssertEqual(fonts.map { Int(CTFontGetSize($0)) }, [12, 16, 24, 36])
+            XCTAssertEqual(fonts.map { (CTFontCopyFamilyName($0) as String).hasPrefix("Ark Pixel") }, [true, false, true, true])
+        }
     }
 
     func testCharactersAFontLacksComeFromASubstitute() {
@@ -105,6 +111,10 @@ final class ViewTests: BoardTestCase {
         XCTAssertEqual(whole, textWidth("权说明", family: "arkpixel", size: 12, bold: false) + 12)
         let cut = fitted(String(repeating: "鉴权说明", count: 8), family: "arkpixel", size: 16, bold: true, width: 160)
         XCTAssertLessThanOrEqual(textWidth(cut, family: "arkpixel", size: 16, bold: true), 160)
+        // at 16 dots a pixel font takes the character from another pixel font, a full square wide
+        XCTAssertEqual(Fonts.substitutes("zhengge", size: 16).first?.path, Fonts.chill)
+        XCTAssertNotEqual(Fonts.substitutes("zhengge", size: 12).first?.path, Fonts.chill)
+        XCTAssertNotEqual(Fonts.substitutes("pingfang", size: 16).first?.path, Fonts.chill)
     }
 
     func testSamplesAndSpecialFramesRender() {

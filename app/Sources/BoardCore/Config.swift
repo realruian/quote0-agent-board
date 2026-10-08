@@ -81,7 +81,7 @@ public struct Settings: Equatable {
     public var staleRunningMinutes = 60
 
     public static let takeoverKinds = ["permission", "question", "plan"]
-    public static let fontChoices = ["pingfang", "misans", "hiragino", "arkpixel"]
+    public static let fontChoices = ["pingfang", "misans", "hiragino", "arkpixel", "zhengge", "chill"]
     /// What the settings page may change. The rest identifies the device.
     public static let editable = ["font", "keep_on_screen", "paused", "show_titles", "show_detail", "show_usage", "max_rows",
                                   "idle_show_last", "aliases", "hidden_projects", "done_ttl_minutes", "takeover", "quiet_hours",

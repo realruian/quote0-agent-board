@@ -208,7 +208,7 @@ The picture shows the window of the Swift app; the settings page in the browser 
 
 Changes are saved automatically and take effect at once. They are stored in `~/.quote0-agent-board/config.json`. The port is `web_port` in that file; restart the daemon after changing it.
 
-Only fonts present on the machine are offered: PingFang (default), MiSans, Hiragino Sans GB, and the Ark Pixel font that ships with the project. The display has no greys and text is drawn without anti-aliasing, so stroke weight differs between fonts. When the chosen font lacks a character, that one character is drawn in Hiragino Sans GB instead of showing as an empty box; Ark Pixel currently lacks about one common Chinese character in twenty (然, 热 and 鉴, for example).
+Only fonts present on the machine are offered: PingFang (default), MiSans, Hiragino Sans GB, and the Ark Pixel font that ships with the project. The display has no greys and text is drawn without anti-aliasing, so stroke weight differs between fonts. The Swift app also ships two pixel fonts drawn for 16 dots, ZhengGeDianHei 16 (正格点黑) and ChillBitmap 16px (寒蝉点阵体). With either, conversation names are drawn one dot to one pixel in strokes one pixel wide, the sharpest and the thinnest; small text and the large text of the full-screen alert stay in Ark Pixel. When the chosen font lacks a character, that one character is drawn in Hiragino Sans GB instead of showing as an empty box; Ark Pixel currently lacks about one common Chinese character in twenty (然, 热 and 鉴, for example).
 
 ## Remaining quota
 
@@ -310,10 +310,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more, and [CHANGELOG.md](CHANGELOG.md
 ## Credits and disclaimer
 
 - The feature design is modelled on [Vibe Island](https://vibeisland.app).
-- The bundled pixel font is [Ark Pixel Font](https://github.com/TakWolf/ark-pixel-font), distributed under the SIL OFL 1.1. The full license is in `agent_board/fonts/ark-pixel-OFL.txt`.
+- The bundled pixel fonts are [Ark Pixel Font](https://github.com/TakWolf/ark-pixel-font), [ZhengGeDianHei 16](https://github.com/yzdnn/ZhengGeDianHei-16) and [ChillBitmap 16px](https://github.com/Warren2060/ChillBitmap), all distributed under the SIL OFL 1.1. The full licenses are in their own files in `agent_board/fonts/`.
 - The icons in the Swift app's window are from the free set of [Hugeicons](https://hugeicons.com), distributed under the MIT licence; the full text is in `app/Hugeicons-LICENSE.md`.
 - This is a personal project with no affiliation to MindReset, Anthropic, OpenAI or Vibe Island. The agent icons on the screen are used only to identify the corresponding products, and the saw-edged disc in the app icon is taken from the Dot. app's icon to say that the board runs on a Dot. device; the names and logos belong to their respective owners.
 
 ## License
 
-[MIT](LICENSE). The bundled Ark Pixel font is not covered by it; the font is distributed under the SIL OFL 1.1.
+[MIT](LICENSE). The three bundled pixel fonts are not covered by it; they are distributed under the SIL OFL 1.1.
