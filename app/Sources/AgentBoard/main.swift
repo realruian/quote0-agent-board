@@ -5,13 +5,41 @@
 // which can be turned off: it says whether the board is healthy and how many
 // conversations are waiting, and its menu shows the frame on the screen and each
 // conversation's state. Closing the window leaves the board running; quitting the
-// app turns it off.
+// app turns it off. The Dock icon can be set to go when the window closes, which
+// leaves the app in the menu bar alone: one of the two icons is always there.
 
 import AppKit
 import BoardCore
 
-let boardSymbol = "list.bullet.rectangle"
+/// Stands for the board's own mark where a symbol is named; `boardMark` draws it.
+let boardSymbol = "board"
 let maxMenuRows = 8
+
+/// The mark in the middle of the app's icon, for the menu bar: the device's screen as one solid
+/// shape with the saw-edged disc of the Dot. app cut out of it. The proportions are those of
+/// scripts/make_app_icon.py, where the screen is 560 by 380.
+func boardMark(width: CGFloat) -> NSImage {
+    let unit = width / 560
+    let image = NSImage(size: NSSize(width: width, height: (380 * unit).rounded(.up)), flipped: false) { bounds in
+        let screen = NSRect(x: 0, y: (bounds.height - 380 * unit) / 2, width: width, height: 380 * unit)
+        let shape = NSBezierPath(roundedRect: screen, xRadius: 84 * unit, yRadius: 84 * unit)
+        let teeth = 12
+        // At this size the teeth are cut a little deeper than on the icon, or they close up into a plain circle.
+        for i in 0..<(teeth * 2) {
+            let radius = 122 * unit * (i % 2 == 0 ? 1 : 0.8)
+            let angle = (7 + CGFloat(i) * 180 / CGFloat(teeth)) * .pi / 180
+            let point = NSPoint(x: screen.midX + radius * cos(angle), y: screen.midY + radius * sin(angle))
+            if i == 0 { shape.move(to: point) } else { shape.line(to: point) }
+        }
+        shape.close()
+        shape.windingRule = .evenOdd
+        NSColor.black.setFill()
+        shape.fill()
+        return true
+    }
+    image.isTemplate = true
+    return image
+}
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var engine: Engine!
@@ -22,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var model: BoardModel!
     private var window: SettingsWindow!
     private var saidFarewell = false
+    private var menuBarIcon: NSKeyValueObservation?
+    /// The setting, kept by macOS with the app's other preferences: leave the Dock when the window closes.
+    private static let leavesDock = "leavesDockWhenClosed"
     private static let showWindow = Notification.Name("com.quote0.agent-board.show")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -56,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         model = BoardModel(engine: engine, console: console)
         model.uninstall = { [weak self] in self?.uninstall() }
         window = SettingsWindow(model: model)
+        window.onClose = { [weak self] in self?.settleDock() }
         engine.onChange = { [weak self] in
             DispatchQueue.main.async {
                 self?.draw()
@@ -73,7 +105,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // The menu bar icon is optional now that the app is in the Dock. macOS remembers whether it is shown.
         statusItem.autosaveName = "board"
         statusItem.behavior = .removalAllowed
-        // Opened by hand rather than at login: show the settings, since opening an app should show something.
+        // The app has to be somewhere: when the menu bar icon goes, from the menu or dragged out of the bar, the Dock icon stays.
+        menuBarIcon = statusItem.observe(\.isVisible, options: [.initial]) { [weak self] item, _ in
+            if !item.isVisible { UserDefaults.standard.set(false, forKey: AppDelegate.leavesDock) }
+            self?.settleDock()
+        }
         NSApp.mainMenu = mainMenu()
         // Opened by hand rather than at login: show the window, as opening an app should.
         let snapshot = Paths.isDevelopment && environment["AGENT_BOARD_SNAPSHOT"] != nil
@@ -129,6 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item("刷新屏幕", #selector(refreshScreen), "r", target: self),
             item("暂停", #selector(togglePause), target: self), .separator(),
             item("在菜单栏显示图标", #selector(toggleMenuBarIcon), target: self),
+            item("关闭窗口后保留程序坞图标", #selector(toggleDockIcon), target: self),
             item("卸载…", Paths.isDevelopment ? nil : #selector(uninstall), target: self), .separator(),
             item("隐藏 Agent 状态牌", #selector(NSApplication.hide(_:)), "h"), .separator(),
             item("退出 Agent 状态牌", #selector(NSApplication.terminate(_:)), "q"),
@@ -190,16 +227,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// The board's own mark, the same in every state so it can be found, with a small badge
-    /// when there is something to say. Solid when a conversation is waiting.
-    private func statusIcon(badge: String?, filled: Bool) -> NSImage? {
-        let face = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
-        guard let base = NSImage(systemSymbolName: filled ? boardSymbol + ".fill" : boardSymbol, accessibilityDescription: "Agent 状态牌")?
-            .withSymbolConfiguration(face) else { return nil }
+    /// when there is something to say.
+    private func statusIcon(badge: String?) -> NSImage {
+        let base = boardMark(width: 20)
         guard let badge = badge, let mark = NSImage(systemSymbolName: badge, accessibilityDescription: nil)?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 8.5, weight: .black)) else {
-            base.isTemplate = true
-            return base
-        }
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 8.5, weight: .black)) else { return base }
         let size = NSSize(width: base.size.width + 5, height: base.size.height + 3)
         let image = NSImage(size: size, flipped: false) { _ in
             base.draw(at: NSPoint(x: 0, y: 3), from: .zero, operation: .sourceOver, fraction: 1)
@@ -211,6 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return true
         }
         image.isTemplate = true
+        image.accessibilityDescription = "Agent 状态牌"
         return image
     }
 
@@ -226,12 +259,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let now = snapshot()
         let (_, badge, line) = status(now)
         let waiting = now.sessions.filter { $0.state == .waiting }.count
-        button.image = statusIcon(badge: badge, filled: waiting > 0)
+        button.image = statusIcon(badge: badge)
         button.imagePosition = .imageLeading
         // How many conversations are waiting for the user: the thing the board exists to say.
-        button.title = waiting > 0 ? " \(waiting)" : (button.image == nil ? "状态牌" : "")
+        button.title = waiting > 0 ? " \(waiting)" : ""
         button.toolTip = "Agent 状态牌：\(line)"
-        // The same count on the Dock icon, which is always there.
+        // The same count on the Dock icon, when it is there.
         NSApp.dockTile.badgeLabel = waiting > 0 ? "\(waiting)" : nil
     }
 
@@ -259,6 +292,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
         add("隐藏菜单栏图标", #selector(toggleMenuBarIcon))
+        add("关闭窗口后保留程序坞图标", #selector(toggleDockIcon))
+        menu.items.last?.state = UserDefaults.standard.bool(forKey: AppDelegate.leavesDock) ? .off : .on
         if !Paths.isDevelopment { add("卸载…", #selector(uninstall)) }
         add("退出", #selector(quit), key: "q")
     }
@@ -287,7 +322,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
         item.isEnabled = action != nil
-        if let symbol = symbol { item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+        if let symbol = symbol { item.image = symbol == boardSymbol ? boardMark(width: 17) : NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
         menu.addItem(item)
     }
 
@@ -336,7 +371,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Until a device is connected the settings have nothing to show, so they open on connecting one.
     @objc private func openSettings() {
         let needsSetup = engine.locked { !engine.dryRun && !engine.settings.ready }
+        if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }  // a window on screen has its app in the Dock
         window.show(needsSetup ? .setup : nil)
+    }
+
+    /// Put the app in the Dock or take it out, as the setting and the window have it.
+    private func settleDock() {
+        guard ProcessInfo.processInfo.environment["AGENT_BOARD_SNAPSHOT"] == nil else { return }
+        let leaves = UserDefaults.standard.bool(forKey: AppDelegate.leavesDock) && !window.isOpen
+        let wanted: NSApplication.ActivationPolicy = leaves ? .accessory : .regular
+        if NSApp.activationPolicy() != wanted { NSApp.setActivationPolicy(wanted) }
     }
 
     @objc private func refreshScreen() {
@@ -350,6 +394,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleMenuBarIcon() {
         statusItem.isVisible.toggle()
+    }
+
+    @objc private func toggleDockIcon() {
+        let leaves = !UserDefaults.standard.bool(forKey: AppDelegate.leavesDock)
+        if leaves { statusItem.isVisible = true }  // out of the Dock, the menu bar is the way back in
+        UserDefaults.standard.set(leaves, forKey: AppDelegate.leavesDock)
+        settleDock()
     }
 
     @objc private func quit() {
@@ -384,6 +435,7 @@ extension AppDelegate: NSMenuItemValidation {
             return !needsSetup
         case #selector(refreshScreen): return !needsSetup
         case #selector(toggleMenuBarIcon): item.state = statusItem.isVisible ? .on : .off
+        case #selector(toggleDockIcon): item.state = UserDefaults.standard.bool(forKey: AppDelegate.leavesDock) ? .off : .on
         default: break
         }
         return true
@@ -392,6 +444,8 @@ extension AppDelegate: NSMenuItemValidation {
 
 let delegate = AppDelegate()
 NSApplication.shared.delegate = delegate
-// In the Dock like any app. A development copy taking a picture of its own page stays out of it.
-NSApplication.shared.setActivationPolicy(ProcessInfo.processInfo.environment["AGENT_BOARD_SNAPSHOT"] == nil ? .regular : .accessory)
+// In the Dock like any app. A development copy taking a picture of its own page stays out of it, and so
+// does an app set to leave the Dock, until its window opens.
+let outOfDock = ProcessInfo.processInfo.environment["AGENT_BOARD_SNAPSHOT"] != nil || UserDefaults.standard.bool(forKey: "leavesDockWhenClosed")
+NSApplication.shared.setActivationPolicy(outOfDock ? .accessory : .regular)
 NSApplication.shared.run()
