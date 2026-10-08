@@ -93,7 +93,6 @@ The project was first written in Python. The Python version is still in the repo
 - macOS 14 or newer, on Apple silicon or Intel.
 - A Quote/0 that is online and plugged in.
 - Claude Code or Codex, or both. The desktop apps and the command-line tools both work; they share the same hook configuration.
-- For now you build the app from source yourself, which needs Apple's command line tools (`xcode-select --install`) and the `python3` that comes with macOS.
 
 ## Installation
 
@@ -103,7 +102,16 @@ In the Dot. app's Content Studio, add Image API to this device's loop. The board
 
 It is best to keep Image API as the only item in the loop. When the device rotates to other content it replaces the board; the app switches back within a minute, but the screen flashes two extra times.
 
-### 2. Build the app and open it
+### 2. Download the app and open it
+
+Download `Agent-Board-<version>.dmg` from [Releases](https://github.com/realruian/quote0-agent-board/releases/latest) (about 9 MB, for both Apple silicon and Intel), open it, drag Agent 状态牌 into Applications, and open it from there.
+
+The app is **not signed**, so macOS blocks it the first time: click Done in the prompt, allow it under System Settings → Privacy & Security → Open Anyway, and open it once more. The note inside the disk image has the steps.
+
+<details>
+<summary>Rather not download: build it from source</summary>
+
+This needs Apple's command line tools (`xcode-select --install`) and the `python3` that comes with macOS:
 
 ```bash
 git clone https://github.com/realruian/quote0-agent-board.git
@@ -111,7 +119,9 @@ cd quote0-agent-board
 python3 scripts/build_app.py
 ```
 
-This leaves `dist/Agent 状态牌.app` and `dist/Agent-Board-<version>.dmg` (about 9 MB; for both Apple silicon and Intel when the full Xcode is installed, for this machine's processor only with just the command line tools). Drag the app into Applications and open it from there.
+This leaves `dist/Agent 状态牌.app` and `dist/Agent-Board-<version>.dmg`, for both Apple silicon and Intel when the full Xcode is installed, and for this machine's processor only with just the command line tools. macOS does not block an app you built yourself.
+
+</details>
 
 The first time it opens, the app does the following, backing up every file it edits to `~/.quote0-agent-board/backups/`:
 
@@ -122,8 +132,6 @@ The first time it opens, the app does the following, backing up every file it ed
 5. Takes over from the Python version's daemon if that was installed. Settings and hooks are shared, so nothing needs setting up again.
 
 Hooks only apply to conversations started after installation. To leave an agent unconnected, disconnect it on the window's Agent page.
-
-If you hand the disk image to someone else: the app is **not signed**, so macOS blocks a downloaded copy the first time. Allow it under System Settings → Privacy & Security → Open Anyway. The note inside the disk image has the steps.
 
 ### 3. Connect the device in the window that opens
 
@@ -223,12 +231,7 @@ To report a security issue, see [SECURITY.md](SECURITY.md).
 
 ## Updating and uninstalling
 
-To update: quit the app from the menu bar, build it again, replace the copy in Applications with the new one, and open it.
-
-```bash
-git pull
-python3 scripts/build_app.py
-```
+To update: quit the app from the menu bar, download the new disk image from [Releases](https://github.com/realruian/quote0-agent-board/releases/latest), replace the copy in Applications with the app inside it, and open it. Settings and hooks are kept.
 
 To uninstall: choose 卸载… from the app's menu at the top of the screen, or uninstall from the window's 关于 page, then drag the app to the Trash. Uninstalling removes the hooks, stops the app opening at login and restores the device's loop interval. Settings and logs stay in `~/.quote0-agent-board/`; delete that folder by hand if you do not want them.
 

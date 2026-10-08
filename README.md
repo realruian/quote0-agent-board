@@ -90,7 +90,6 @@ flowchart TB
 - macOS 14 或更新版本，Apple 芯片和 Intel 都可以。
 - 一台已联网、插着电的 Quote/0。
 - Claude Code、Codex 至少装了一个。桌面应用和命令行都可以，它们用的是同一份钩子配置。
-- 目前要自己从源代码构建 App，需要 Xcode 命令行工具（`xcode-select --install`）和系统自带的 `python3`。
 
 ## 安装
 
@@ -100,7 +99,16 @@ flowchart TB
 
 循环列表里最好只留「图像 API」一项。有其他内容时，设备轮播到它们就会把状态牌换掉；App 会在一分钟内切回来，但屏幕会多闪两次。
 
-### 2. 构建并打开 App
+### 2. 下载并打开 App
+
+从 [Releases](https://github.com/realruian/quote0-agent-board/releases/latest) 下载 `Agent-Board-<版本>.dmg`（约 9 MB，同时支持 Apple 芯片和 Intel），打开后把「Agent 状态牌」拖进「应用程序」，从那里打开。
+
+这个 App **没有签名**，第一次打开会被 macOS 拦一下：在提示里点「完成」，到「系统设置 → 隐私与安全性」里点「仍要打开」，再打开一次。DMG 里的「先看这里.txt」写了步骤。
+
+<details>
+<summary>不想下载：自己从源代码构建</summary>
+
+需要 Xcode 命令行工具（`xcode-select --install`）和系统自带的 `python3`：
 
 ```bash
 git clone https://github.com/realruian/quote0-agent-board.git
@@ -108,7 +116,9 @@ cd quote0-agent-board
 python3 scripts/build_app.py
 ```
 
-会生成 `dist/Agent 状态牌.app` 和 `dist/Agent-Board-<版本>.dmg`（约 9 MB；装了完整的 Xcode 时同时支持 Apple 芯片和 Intel，只有命令行工具时只支持本机的芯片）。把 App 拖进「应用程序」，从那里打开。
+会生成 `dist/Agent 状态牌.app` 和 `dist/Agent-Board-<版本>.dmg`。装了完整的 Xcode 时同时支持 Apple 芯片和 Intel，只有命令行工具时只支持本机的芯片。自己构建的 App 不会被 macOS 拦。
+
+</details>
 
 第一次打开时，App 做这几件事，改动的文件都会先备份到 `~/.quote0-agent-board/backups/`：
 
@@ -119,8 +129,6 @@ python3 scripts/build_app.py
 5. 如果装过 Python 版，接管它的后台进程。设置和钩子是通用的，不用重新配置。
 
 钩子只对安装之后新开的对话生效。不想连接某个 Agent 的话，在窗口的「Agent」页里断开。
-
-把 DMG 发给别人用时，这个 App **没有签名**：从网上下载的 DMG 第一次打开会被 macOS 拦一下，要到「系统设置 → 隐私与安全性」里点「仍要打开」。DMG 里的「先看这里.txt」写了步骤。
 
 ### 3. 在打开的窗口里连接设备
 
@@ -220,12 +228,7 @@ python3 scripts/build_app.py
 
 ## 更新与卸载
 
-更新到最新版本：先在菜单栏里退出 App，再重新构建，用新的 App 替换「应用程序」里的旧的，然后打开。
-
-```bash
-git pull
-python3 scripts/build_app.py
-```
+更新到最新版本：先在菜单栏里退出 App，从 [Releases](https://github.com/realruian/quote0-agent-board/releases/latest) 下载新的 DMG，用里面的 App 替换「应用程序」里的旧的，然后打开。设置和钩子都会保留。
 
 卸载：在屏幕顶部的「Agent 状态牌」菜单里选「卸载…」，或者在窗口的「关于」页里点卸载，然后把 App 拖进废纸篓。卸载会移除钩子、取消开机自启，并把设备的轮播间隔恢复原值。设置和日志会留在 `~/.quote0-agent-board/`，不想要的话手动删掉这个文件夹。
 

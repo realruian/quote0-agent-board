@@ -4,13 +4,15 @@
 
 ## [未发布]
 
+## [0.3.0] - 2026-10-09
+
 ### 新增
 
 - 设备休眠或离线时，设置页的总览、设备页和诊断会标出最新画面没有显示到屏幕上，`status` 命令也会提示。
 - 设备醒来后自动补推它休眠期间错过的画面。
 - 设置页可以改用电池时的刷新间隔（1 分钟到 12 小时）。
 - 菜单栏 App「Agent 状态牌」：图标显示状态牌是否正常、有几个对话在等你；点开能看屏幕当前画面和每个对话的状态，打开设置、刷新屏幕、暂停、退出。安装时在本机编译，需要 Xcode 命令行工具，没装时自动跳过；加 `--no-menubar` 可以不装。
-- Swift 版 App：后台进程用 Swift 重写，和菜单栏图标合成一个 App，不需要 Python，安装包约 3 MB。`python3 scripts/build_app.py` 生成 App 和 DMG。配置文件、钩子和设置页与 Python 版通用。
+- Swift 版 App：后台进程用 Swift 重写，和菜单栏图标合成一个 App，不需要 Python，安装包约 9 MB。`python3 scripts/build_app.py` 生成 App 和 DMG。配置文件、钩子和设置页与 Python 版通用。
 - 在设置页里连接设备：安装后自动打开「连接设备」，填 API 密钥、选设备、检查屏幕三步完成，不用再手动存密钥文件和抄设备序列号。换密钥或换设备也在这里。安装命令简化为 `python3 install.py`，原来的 `--device` 方式仍然可用。
 - Swift 版 App 可以只留在菜单栏：取消「关闭窗口后保留程序坞图标」后，窗口一关程序坞图标就消失，再打开窗口时回来。
 - Swift 版 App 多了两个字体：正格点黑和寒蝉点阵体，都是按 16 像素画的点阵字体。对话名称一个点对一个像素，不再有方舟像素放大到 16 像素时的粗细不均。
@@ -66,4 +68,5 @@
 - 通过 MindReset 图像 API 推送，状态变化才刷新。
 - 安装和卸载脚本，改动的文件都先备份。
 
+[0.3.0]: https://github.com/realruian/quote0-agent-board/releases/tag/v0.3.0
 [0.2.0]: https://github.com/realruian/quote0-agent-board/releases/tag/v0.2.0
