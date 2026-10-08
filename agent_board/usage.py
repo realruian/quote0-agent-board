@@ -1,20 +1,24 @@
-"""Subscription quota readings, taken from files that already exist on this machine.
+"""Subscription quota readings.
 
-Nothing here logs in anywhere or touches credentials:
+Nothing here logs in anywhere or reads a credential:
 - Codex writes its rate limits into its own session records after every reply.
-- Claude Code reports its limits only to a terminal status line. Vibe Island
-  keeps what it last saw from that, and from its own checks, in two local files.
+- Claude Code answers a usage request on its command line's control channel,
+  with the sign-in the command line already has.
 
-A Claude reading goes stale quickly, because sessions in the desktop app spend
-quota without updating either file, so it is only trusted while it is recent.
+A Claude reading goes stale quickly, because every Claude app on the account
+spends the same quota, so it is asked for again every few minutes and only
+trusted while it is recent.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sqlite3
+import select
+import shutil
+import subprocess
 import time
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 
@@ -22,11 +26,18 @@ FIVE_HOUR, SEVEN_DAY = "five_hour", "seven_day"
 WINDOWS = (FIVE_HOUR, SEVEN_DAY)
 
 CODEX_SESSIONS = Path.home() / ".codex" / "sessions"
-VIBE_STATUSLINE_CACHE = Path.home() / ".vibe-island" / "cache" / "rl.json"
-VIBE_USAGE_DB = Path.home() / ".vibe-island" / "data" / "usage" / "usage.sqlite"
-
-CLAUDE_MAX_AGE = 20 * 60
 TAIL_BYTES = 256_000
+
+CLAUDE_BINARIES = (Path.home() / ".local" / "bin" / "claude", Path.home() / ".claude" / "local" / "claude")
+# Nothing of the user's is loaded (so our own hooks do not fire), no tools, nothing saved.
+CLAUDE_ARGS = ("--safe-mode", "--no-session-persistence", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}',
+               "--tools", "", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose")
+# Set inside a Claude Code session; with them the command line acts as part of that session.
+CLAUDE_SESSION_ENV = ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT",
+                      "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID")
+CLAUDE_EVERY = 5 * 60
+CLAUDE_TIMEOUT = 15
+CLAUDE_MAX_AGE = 20 * 60
 
 
 def _find(obj, key: str):
@@ -98,37 +109,89 @@ def read_codex(root: Path = CODEX_SESSIONS) -> dict | None:
     return None
 
 
-def _claude_windows(data: dict) -> dict:
+def claude_bin() -> str | None:
+    for path in CLAUDE_BINARIES:
+        if os.access(path, os.X_OK):
+            return str(path)
+    return shutil.which("claude")
+
+
+def _claude_env() -> dict:
+    """The environment to ask in: outside any Claude Code session this process was
+    started from, and through the system proxy, which a launchd job is not told about."""
+    env = {k: v for k, v in os.environ.items() if k not in CLAUDE_SESSION_ENV}
+    for scheme, url in urllib.request.getproxies().items():
+        if scheme in ("http", "https"):
+            env.setdefault(f"{scheme.upper()}_PROXY", url)
+    return env
+
+
+def _ask_claude(binary: str, timeout: float = CLAUDE_TIMEOUT) -> dict | None:
+    """The command line's answer to a usage request, or None when it gives none in time."""
+    deadline, pending = time.monotonic() + timeout, b""
+    with subprocess.Popen([binary, *CLAUDE_ARGS], cwd=Path.home(), env=_claude_env(), stdin=subprocess.PIPE,
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as child:
+
+        def send(request_id: str, subtype: str) -> None:
+            request = {"type": "control_request", "request_id": request_id, "request": {"subtype": subtype}}
+            child.stdin.write(json.dumps(request).encode() + b"\n")
+            child.stdin.flush()
+
+        try:
+            send("init", "initialize")
+            while True:
+                ready, _, _ = select.select([child.stdout], [], [], max(0, deadline - time.monotonic()))
+                chunk = os.read(child.stdout.fileno(), 65536) if ready else b""
+                if not chunk:  # out of time, or the command line went away
+                    return None
+                *lines, pending = (pending + chunk).split(b"\n")
+                for line in lines:
+                    try:
+                        message = json.loads(line)
+                    except ValueError:
+                        continue
+                    reply = message.get("response") if isinstance(message, dict) else None
+                    if message.get("type") != "control_response" or not isinstance(reply, dict):
+                        continue
+                    if reply.get("subtype") != "success":
+                        return None
+                    if reply.get("request_id") == "init":
+                        send("usage", "get_usage")
+                    elif reply.get("request_id") == "usage":
+                        return reply.get("response")
+        finally:
+            child.kill()
+
+
+def _claude_windows(limits) -> dict:
     windows = {}
     for kind in WINDOWS:
-        window = data.get(kind)
-        if isinstance(window, dict) and isinstance(window.get("used_percentage"), (int, float)):
-            windows[kind] = {"used": float(window["used_percentage"]), "resets_at": float(window.get("resets_at") or 0)}
+        window = limits.get(kind) if isinstance(limits, dict) else None
+        if isinstance(window, dict) and isinstance(window.get("utilization"), (int, float)):
+            # the reported reset time wobbles by a fraction of a second from one ask to the next
+            windows[kind] = {"used": float(window["utilization"]), "resets_at": round(_iso(window.get("resets_at")) / 60) * 60.0}
     return windows
 
 
-def read_claude(cache: Path = VIBE_STATUSLINE_CACHE, db: Path = VIBE_USAGE_DB) -> dict | None:
-    """The more recent of the two local records of Claude's limits, if any."""
-    readings = []
-    try:
-        windows = _claude_windows(json.loads(cache.read_text()))
+_claude = {"asked_at": 0.0, "reading": None}
+
+
+def read_claude(now: float | None = None, ask=_ask_claude) -> dict | None:
+    """Claude's limits as the command line last reported them. Asking starts a
+    process and reaches Anthropic, so it is done every few minutes and the answer
+    kept; an ask that fails leaves the earlier reading to age out."""
+    now = time.time() if now is None else now
+    if now - _claude["asked_at"] >= CLAUDE_EVERY:
+        _claude["asked_at"] = now
+        binary = claude_bin()
+        try:
+            answer = ask(binary) if binary else None
+        except OSError:
+            answer = None
+        windows = _claude_windows(answer.get("rate_limits")) if isinstance(answer, dict) else {}
         if windows:
-            readings.append({"observed_at": cache.stat().st_mtime, "windows": windows})
-    except (OSError, ValueError):
-        pass
-    try:
-        with sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=1) as conn:
-            row = conn.execute(
-                "select snapshot from usage_limit_records where provider = 'anthropic' and snapshot is not null "
-                "order by json_extract(snapshot, '$.fetched_at') desc limit 1").fetchone()
-        if row:
-            snapshot = json.loads(row[0])
-            windows = _claude_windows(snapshot)
-            if windows:
-                readings.append({"observed_at": float(snapshot.get("fetched_at") or 0), "windows": windows})
-    except (sqlite3.Error, ValueError, TypeError):
-        pass
-    return max(readings, key=lambda r: r["observed_at"], default=None)
+            _claude["reading"] = {"observed_at": now, "windows": windows}
+    return _claude["reading"]
 
 
 def _left(agent: str, reading: dict | None, now: float) -> dict:
@@ -157,7 +220,7 @@ def snapshot(now: float | None = None) -> dict:
     """{"claude": {...}, "codex": {...}}: per window, percent left and reset time.
     An agent maps to {} when there is no reading worth showing."""
     now = time.time() if now is None else now
-    claude, codex = read_claude(), read_codex()
+    claude, codex = read_claude(now), read_codex()
     return {
         "claude": {"windows": _left("claude", claude, now), "observed_at": claude["observed_at"] if claude else 0},
         "codex": {"windows": _left("codex", codex, now), "observed_at": codex["observed_at"] if codex else 0},

@@ -1,14 +1,15 @@
-"""Quota readings from local files, and how they appear on the frame."""
+"""Quota readings, and how they appear on the frame."""
 
 from __future__ import annotations
 
 import json
 import os
-import sqlite3
+import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from agent_board import usage
 from agent_board.render import H, SAMPLE_USAGE, W, build_view, render, sample_board, signature
@@ -57,24 +58,62 @@ class CodexReadingTest(unittest.TestCase):
 
 
 class ClaudeReadingTest(unittest.TestCase):
-    def test_picks_the_fresher_of_cache_and_database(self):
+    # the shape the command line answers a usage request with
+    ANSWER = {"subscription_type": "max", "rate_limits_available": True, "rate_limits": {
+        "five_hour": {"utilization": 77, "resets_at": "2026-10-08T16:59:59.555743+00:00", "limit_dollars": None},
+        "seven_day": {"utilization": 39.5, "resets_at": "2026-10-10T13:00:00.070005+00:00"},
+        "seven_day_opus": None, "limits": [{"kind": "session", "percent": 77}]}}
+
+    def setUp(self):
+        usage._claude.update(asked_at=0.0, reading=None)
+        patch = mock.patch.object(usage, "claude_bin", return_value="/x/claude")
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.addCleanup(usage._claude.update, asked_at=0.0, reading=None)
+
+    def test_reads_both_windows_with_the_reset_on_the_minute(self):
+        reading = usage.read_claude(NOW, lambda binary: self.ANSWER)
+        self.assertEqual(reading, {"observed_at": NOW, "windows": {
+            "five_hour": {"used": 77.0, "resets_at": 1791478800.0}, "seven_day": {"used": 39.5, "resets_at": 1791637200.0}}})
+
+    def test_asks_once_in_a_while_and_keeps_the_answer(self):
+        asked = []
+        ask = lambda binary: asked.append(binary) or self.ANSWER
+        usage.read_claude(NOW, ask)
+        self.assertEqual(usage.read_claude(NOW + 30, ask)["observed_at"], NOW)
+        self.assertEqual(usage.read_claude(NOW + usage.CLAUDE_EVERY, ask)["observed_at"], NOW + usage.CLAUDE_EVERY)
+        self.assertEqual(asked, ["/x/claude", "/x/claude"])
+
+    def test_an_ask_that_fails_leaves_the_earlier_reading(self):
+        def broken(binary):
+            raise OSError("gone")
+        usage.read_claude(NOW, lambda binary: self.ANSWER)
+        for at, ask in ((1, broken), (2, lambda binary: None),
+                        (3, lambda binary: {"rate_limits_available": False, "rate_limits": None})):
+            self.assertEqual(usage.read_claude(NOW + at * usage.CLAUDE_EVERY, ask)["observed_at"], NOW)
+
+    def test_no_command_line_means_no_reading(self):
+        with mock.patch.object(usage, "claude_bin", return_value=None):
+            self.assertIsNone(usage.read_claude(NOW, lambda binary: self.fail("asked without a command line")))
+
+    def test_talks_to_the_command_line_over_its_control_channel(self):
         with tempfile.TemporaryDirectory() as tmp:
-            cache, db = Path(tmp) / "rl.json", Path(tmp) / "usage.sqlite"
-            self.assertIsNone(usage.read_claude(cache, db))
-            cache.write_text(json.dumps({"five_hour": {"used_percentage": 16, "resets_at": 100},
-                                         "seven_day": {"used_percentage": 2, "resets_at": 200}}))
-            os.utime(cache, (NOW - 500, NOW - 500))
-            self.assertEqual(usage.read_claude(cache, db)["windows"]["five_hour"], {"used": 16.0, "resets_at": 100.0})
-            conn = sqlite3.connect(db)
-            conn.execute("create table usage_limit_records (provider text, snapshot blob)")
-            conn.execute("insert into usage_limit_records values ('anthropic', ?)", (json.dumps(
-                {"fetched_at": NOW - 60, "five_hour": {"used_percentage": 64, "resets_at": 300},
-                 "seven_day": {"used_percentage": 27, "resets_at": 400}}),))
-            conn.execute("insert into usage_limit_records values ('openai', ?)", (json.dumps({"fetched_at": NOW}),))
-            conn.commit()
-            conn.close()
-            reading = usage.read_claude(cache, db)
-            self.assertEqual((reading["observed_at"], reading["windows"]["five_hour"]["used"]), (NOW - 60, 64.0))
+            fake = Path(tmp) / "claude"  # answers each request the way the command line does
+            fake.write_text("#!" + sys.executable + """
+import json, sys
+for line in sys.stdin:
+    request = json.loads(line)
+    answer = {"rate_limits": {"five_hour": {"utilization": 5}}} if request["request"]["subtype"] == "get_usage" else {}
+    print(json.dumps({"type": "system", "subtype": "noise"}), flush=True)
+    print(json.dumps({"type": "control_response", "response": {
+        "subtype": "success", "request_id": request["request_id"], "response": answer}}), flush=True)
+""")
+            fake.chmod(0o755)
+            self.assertEqual(usage._ask_claude(str(fake)), {"rate_limits": {"five_hour": {"utilization": 5}}})
+            silent = Path(tmp) / "silent"
+            silent.write_text("#!/bin/sh\nexec sleep 30\n")
+            silent.chmod(0o755)
+            self.assertIsNone(usage._ask_claude(str(silent), timeout=0.3))
 
 
 class TrustTest(unittest.TestCase):
