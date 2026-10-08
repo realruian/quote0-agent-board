@@ -101,6 +101,38 @@ final class HooksTests: BoardTestCase {
     }
 }
 
+final class ReviewerTests: BoardTestCase {
+    private func turn(_ reviewer: String) -> String {
+        #"{"type":"turn_context","payload":{"approval_policy":"on-request","approvals_reviewer":"\#(reviewer)","model":"m"}}"#
+    }
+
+    func testTheLatestTurnSaysWhoAnswers() {
+        // What a tool printed has its quotes escaped, and is not the record's own field.
+        let output = #"{"type":"response_item","payload":{"output":"{\"approvals_reviewer\":\"user\"}"}}"#
+        let padding = String(repeating: "x", count: 3 << 20)  // the turn's record is several chunks back
+        let auto = write([turn("user"), turn("auto_review"), output, padding].joined(separator: "\n") + "\n", "auto.jsonl").path
+        XCTAssertTrue(Reviewer.codexReviewsItself(transcript: auto))
+        let user = write([turn("auto_review"), turn("user"), padding].joined(separator: "\n") + "\n", "user.jsonl").path
+        XCTAssertFalse(Reviewer.codexReviewsItself(transcript: user))
+        XCTAssertFalse(Reviewer.codexReviewsItself(transcript: write("{}\n", "plain.jsonl").path))
+        XCTAssertFalse(Reviewer.codexReviewsItself(transcript: home.appendingPathComponent("missing.jsonl").path))
+    }
+
+    func testARequestCodexReviewsItselfDoesNotWaitForTheUser() {
+        let engine = Engine(dryRun: true)
+        let path = write(turn("auto_review") + "\n", "codex.jsonl").path
+        let request = alpha.with(["tool_name": "shell", "transcript_path": .string(path), "turn_id": "t1"])
+        engine.onEvent("codex", "UserPromptSubmit", alpha)
+        engine.onEvent("codex", "PermissionRequest", request)
+        XCTAssertEqual(engine.board.visible().map(\.state), [.running])
+        // The same request in Claude Code, or in a Codex turn the user answers, does wait.
+        engine.onEvent("claude", "PermissionRequest", request)
+        _ = write(turn("user") + "\n", "codex.jsonl")
+        engine.onEvent("codex", "PermissionRequest", request.with(["turn_id": "t2"]))
+        XCTAssertEqual(engine.board.visible().map(\.state), [.waiting, .waiting])
+    }
+}
+
 final class NamesTests: BoardTestCase {
     func testLatestTitleRecordWins() {
         let path = write([

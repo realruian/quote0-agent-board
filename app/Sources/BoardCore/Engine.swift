@@ -73,6 +73,8 @@ public final class Engine {
     public private(set) var usage: Usage?
     private var seenEvents: Set<String> = []
     private var namesReadAt = 0.0
+    /// Per Codex conversation, whether the turn it is in has Codex review its own permission requests.
+    private var reviewed: [String: (turn: String, auto: Bool)] = [:]
 
     private let wake = NSCondition()  // for the three flags below
     private var dirty = false
@@ -135,6 +137,15 @@ public final class Engine {
 
     private func waitingKeys() -> Set<String> { Set(board.visible().filter { $0.state == .waiting }.map(\.key)) }
 
+    /// A Codex permission request its own reviewer answers: nobody waits for the user. Read once a turn.
+    private func reviewsItself(_ payload: JSON) -> Bool {
+        let session = payload["session_id"]?.string ?? "", turn = payload["turn_id"]?.string ?? ""
+        if let known = reviewed[session], known.turn == turn, !turn.isEmpty { return known.auto }
+        let auto = Reviewer.codexReviewsItself(transcript: payload["transcript_path"]?.string ?? "")
+        reviewed[session] = (turn, auto)
+        return auto
+    }
+
     public func onEvent(_ source: String, _ event: String, _ payload: JSON) {
         let changed: Bool = locked {
             if seenEvents.insert("\(source) \(event)").inserted {
@@ -142,8 +153,11 @@ public final class Engine {
                 Log.info("first \(source) \(event) since start; payload fields: \((payload.object?.keys ?? []).sorted().joined(separator: ", "))")
             }
             let wasWaiting = waitingKeys()
-            let changed = board.apply(source, event, payload)
-            Log.info("\(source) \(event)\(changed ? " (board changed)" : "")")
+            // To the board such a request is the tool starting: the conversation is still running.
+            let selfReviewed = source == "codex" && event == "PermissionRequest" && reviewsItself(payload)
+            if event == "SessionEnd" { reviewed[payload["session_id"]?.string ?? ""] = nil }
+            let changed = board.apply(source, selfReviewed ? "PreToolUse" : event, payload)
+            Log.info("\(source) \(event)\(selfReviewed ? " (reviewed by Codex itself)" : "")\(changed ? " (board changed)" : "")")
             let unnamed = board.visible().contains { $0.name.isEmpty }
             if Engine.nameEvents.contains(event) || (unnamed && now() - namesReadAt > 10) { raise(names: true) }
             guard changed else { return false }
