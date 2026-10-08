@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -38,7 +39,7 @@ FIRST_OPEN = f"""安装
 
 打开后菜单栏会多一个图标，浏览器会打开「连接设备」页面，照着填密钥、选设备即可。
 
-卸载：点菜单栏图标，选「卸载…」，再把 App 拖进废纸篓。
+卸载：打开 App，在屏幕顶部的「Agent 状态牌」菜单里选「卸载…」，再把 App 拖进废纸篓。
 
 源代码：https://github.com/realruian/quote0-agent-board
 """
@@ -83,7 +84,7 @@ def bundle(binary: Path) -> Path:
             "CFBundleIconFile": "AppIcon",
             "CFBundlePackageType": "APPL",
             "CFBundleShortVersionString": VERSION,
-            "CFBundleVersion": VERSION,
+            "CFBundleVersion": time.strftime("%Y%m%d.%H%M%S"),  # new for every build: macOS keeps icons by it
             "LSMinimumSystemVersion": "11.0",
             "NSHighResolutionCapable": True,
             "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},  # the window shows pages served on 127.0.0.1

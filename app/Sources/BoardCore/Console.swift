@@ -416,7 +416,7 @@ public final class Console {
         return ["version": .string(version), "runtime": .string("macOS \(system.majorVersion).\(system.minorVersion)"),
                 "home": .string(home), "config": .string("\(home)/config.json"), "log": .string("\(home)/logs/daemon.log"),
                 "backups": .string("\(home)/backups"), "port": JSON(port), "device_id": .string(engine.settings.deviceID),
-                "uninstall": "点菜单栏里的图标，选「卸载…」。它会移除钩子和开机自启，并恢复设备的循环间隔；之后把 App 拖进废纸篓即可。"]
+                "uninstall": "在屏幕顶部的「Agent 状态牌」菜单里选「卸载…」。它会移除钩子和开机自启，并恢复设备的循环间隔；之后把 App 拖进废纸篓即可。"]
     }
 
     // MARK: - requests

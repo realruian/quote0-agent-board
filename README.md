@@ -97,7 +97,8 @@ python3 scripts/build_app.py
 会生成 `dist/Agent 状态牌.app` 和 `dist/Agent-Board-<版本>.dmg`（约 2.4 MB，同时支持 Apple 芯片和 Intel）。把 App 拖进「应用程序」打开即可：它会接管 Python 版的后台进程，第一次打开时连接 Claude Code 和 Codex，并在浏览器里打开「连接设备」。
 
 - **没有签名**：从网上下载的 DMG 第一次打开会被 macOS 拦一下，要到「系统设置 → 隐私与安全性」里点「仍要打开」。DMG 里的「先看这里.txt」写了步骤。
-- **卸载**：点菜单栏图标，选「卸载…」。
+- **菜单栏图标可以关掉**：在屏幕顶部的「Agent 状态牌」菜单里取消「在菜单栏显示图标」。等你处理的对话数量同时显示在程序坞图标上，暂停和刷新在程序坞图标的右键菜单里也有。
+- **卸载**：在屏幕顶部的「Agent 状态牌」菜单里选「卸载…」。
 - **切回 Python 版**：先在菜单栏里退出 App，再运行 `python3 install.py`。
 - **开发**：代码在 `app/`，`swift test --package-path app` 运行测试。
 

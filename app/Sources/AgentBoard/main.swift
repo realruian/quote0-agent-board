@@ -60,6 +60,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
         menu.autoenablesItems = false
         statusItem.menu = menu
+        // The menu bar icon is optional now that the app is in the Dock. macOS remembers whether it is shown.
+        statusItem.autosaveName = "board"
+        statusItem.behavior = .removalAllowed
         // Opened by hand rather than at login: show the settings, since opening an app should show something.
         NSApp.mainMenu = mainMenu()
         // Opened by hand rather than at login: show the window, as opening an app should.
@@ -109,6 +112,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let bar = NSMenu()
         bar.addItem(menu("Agent 状态牌", [
             item("设置…", #selector(openSettings), ",", target: self), .separator(),
+            item("刷新屏幕", #selector(refreshScreen), "r", target: self),
+            item("暂停", #selector(togglePause), target: self), .separator(),
+            item("在菜单栏显示图标", #selector(toggleMenuBarIcon), target: self),
+            item("卸载…", Paths.isDevelopment ? nil : #selector(uninstall), target: self), .separator(),
             item("隐藏 Agent 状态牌", #selector(NSApplication.hide(_:)), "h"), .separator(),
             item("退出 Agent 状态牌", #selector(NSApplication.terminate(_:)), "q"),
         ]))
@@ -210,6 +217,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // How many conversations are waiting for the user: the thing the board exists to say.
         button.title = waiting > 0 ? " \(waiting)" : (button.image == nil ? "状态牌" : "")
         button.toolTip = "Agent 状态牌：\(line)"
+        // The same count on the Dock icon, which is always there.
+        NSApp.dockTile.badgeLabel = waiting > 0 ? "\(waiting)" : nil
     }
 
     // MARK: the menu
@@ -236,8 +245,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             add(now.paused ? "恢复" : "暂停", #selector(togglePause))
         }
         menu.addItem(.separator())
+        add("隐藏菜单栏图标", #selector(toggleMenuBarIcon))
         if !Paths.isDevelopment { add("卸载…", #selector(uninstall)) }
         add("退出", #selector(quit), key: "q")
+    }
+
+    /// A right click on the Dock icon: how the board is doing, and the two things done most often.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let now = snapshot()
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        func add(_ title: String, _ action: Selector?) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = action != nil
+            menu.addItem(item)
+        }
+        add(status(now).line, nil)
+        if !now.needsSetup {
+            add("刷新屏幕", #selector(refreshScreen))
+            add(now.paused ? "恢复" : "暂停", #selector(togglePause))
+        }
+        return menu
     }
 
     /// A row without an action is a caption: it shows greyed and cannot be chosen.
@@ -306,6 +335,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         _ = try? engine.applyConfig(["paused": .bool(!paused)])
     }
 
+    @objc private func toggleMenuBarIcon() {
+        statusItem.isVisible.toggle()
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -325,6 +358,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 exit(0)
             }
         }
+    }
+}
+
+/// The menus along the top of the screen ask before they open what each row should say.
+extension AppDelegate: NSMenuItemValidation {
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        let (paused, needsSetup) = engine.locked { (engine.settings.paused, !engine.dryRun && !engine.settings.ready) }
+        switch item.action {
+        case #selector(togglePause):
+            item.title = paused ? "恢复" : "暂停"
+            return !needsSetup
+        case #selector(refreshScreen): return !needsSetup
+        case #selector(toggleMenuBarIcon): item.state = statusItem.isVisible ? .on : .off
+        default: break
+        }
+        return true
     }
 }
 
