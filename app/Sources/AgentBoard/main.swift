@@ -86,6 +86,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         console.restart = { Install.relaunch() }
         model = BoardModel(engine: engine, console: console)
         model.uninstall = { [weak self] in self?.uninstall() }
+        model.showMenuBarIcon = { [weak self] in self?.statusItem.isVisible = $0 }
+        model.keepDockIcon = { [weak self] in self?.keepDockIcon($0) }
         window = SettingsWindow(model: model)
         window.onClose = { [weak self] in self?.settleDock() }
         engine.onChange = { [weak self] in
@@ -377,6 +379,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Put the app in the Dock or take it out, as the setting and the window have it.
     private func settleDock() {
+        model.menuBarIcon = statusItem.isVisible
+        model.keepsDockIcon = !UserDefaults.standard.bool(forKey: AppDelegate.leavesDock)
         guard ProcessInfo.processInfo.environment["AGENT_BOARD_SNAPSHOT"] == nil else { return }
         let leaves = UserDefaults.standard.bool(forKey: AppDelegate.leavesDock) && !window.isOpen
         let wanted: NSApplication.ActivationPolicy = leaves ? .accessory : .regular
@@ -397,9 +401,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleDockIcon() {
-        let leaves = !UserDefaults.standard.bool(forKey: AppDelegate.leavesDock)
-        if leaves { statusItem.isVisible = true }  // out of the Dock, the menu bar is the way back in
-        UserDefaults.standard.set(leaves, forKey: AppDelegate.leavesDock)
+        keepDockIcon(UserDefaults.standard.bool(forKey: AppDelegate.leavesDock))
+    }
+
+    private func keepDockIcon(_ keeps: Bool) {
+        if !keeps { statusItem.isVisible = true }  // out of the Dock, the menu bar is the way back in
+        UserDefaults.standard.set(!keeps, forKey: AppDelegate.leavesDock)
         settleDock()
     }
 

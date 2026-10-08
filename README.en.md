@@ -100,7 +100,8 @@ python3 scripts/build_app.py
 This leaves `dist/Agent 状态牌.app` and `dist/Agent-Board-<version>.dmg` (about 3 MB, for both Apple silicon and Intel). Drag the app into Applications and open it: it takes over from the Python daemon, connects Claude Code and Codex on first launch, and opens its "connect a device" page.
 
 - **Not signed**: macOS blocks a downloaded copy the first time. Allow it under System Settings → Privacy & Security → Open Anyway. The note inside the disk image has the steps.
-- **The menu bar icon is optional**: untick 在菜单栏显示图标 in the app's menu at the top of the screen. The number of conversations waiting for you is also shown on the Dock icon, and a right click on it offers pause and refresh.
+- **The menu bar icon is optional**: turn off 在菜单栏显示图标 on the window's 关于 page, or in the app's menu at the top of the screen. The number of conversations waiting for you is also shown on the Dock icon, and a right click on it offers pause and refresh.
+- **The Dock icon is optional too**: turn off 关闭窗口后保留程序坞图标 on the window's 关于 page, in the same menu, or in the menu bar icon's menu. The Dock icon then goes when the window closes, leaving the app in the menu bar alone, and comes back when the window opens. One of the two icons always stays: hiding the menu bar icon brings the Dock icon back.
 - **Uninstall**: choose 卸载… from the app's menu at the top of the screen.
 - **Back to the Python version**: quit the app from the menu bar, then run `python3 install.py`.
 - **Development**: the code is in `app/`; `swift test --package-path app` runs the tests.

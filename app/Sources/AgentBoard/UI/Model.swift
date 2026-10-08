@@ -37,7 +37,7 @@ enum Page: String, CaseIterable, Identifiable {
         case .agents: return "状态牌显示哪些 Agent 的对话"
         case .device: return "正在使用的 Quote/0"
         case .diagnostics: return "从钩子到屏幕逐项检查，查看日志"
-        case .about: return "版本、文件位置和卸载"
+        case .about: return "版本、图标、文件位置和卸载"
         case .setup: return "三步把状态牌连到你的 Quote/0"
         }
     }
@@ -77,6 +77,11 @@ final class BoardModel: ObservableObject {
     let engine: Engine
     let console: Console
     var uninstall: () -> Void = {}
+    /// Where the app shows itself. The app holds these, not the board; it keeps the two flags up to date.
+    var showMenuBarIcon: (Bool) -> Void = { _ in }
+    var keepDockIcon: (Bool) -> Void = { _ in }
+    @Published var menuBarIcon = true
+    @Published var keepsDockIcon = true
 
     @Published var page: Page? = .overview
     @Published var settings: BoardSettings
