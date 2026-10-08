@@ -101,7 +101,7 @@ This leaves `dist/Agent 状态牌.app` and `dist/Agent-Board-<version>.dmg` (abo
 
 - **Not signed**: macOS blocks a downloaded copy the first time. Allow it under System Settings → Privacy & Security → Open Anyway. The note inside the disk image has the steps.
 - **The menu bar icon is optional**: turn off 在菜单栏显示图标 on the window's 关于 page, or in the app's menu at the top of the screen. The number of conversations waiting for you is also shown on the Dock icon, and a right click on it offers pause and refresh.
-- **The Dock icon is optional too**: turn off 关闭窗口后保留程序坞图标 on the window's 关于 page or in the same menu. The Dock icon then goes when the window closes, leaving the app in the menu bar alone, and comes back when the window opens. One of the two icons always stays: hiding the menu bar icon brings the Dock icon back.
+- **The Dock icon is optional too**: turn off 关闭窗口后保留程序坞图标 on the window's 关于 page or in the same menu. The Dock icon then goes when the window closes and comes back when the window opens. The two icons are independent and both may be off: the board keeps working in the background, and opening the app again from Launchpad, Spotlight or Finder brings the window back.
 - **Uninstall**: choose 卸载… from the app's menu at the top of the screen.
 - **Back to the Python version**: quit the app from the menu bar, then run `python3 install.py`.
 - **Development**: the code is in `app/`; `swift test --package-path app` runs the tests.

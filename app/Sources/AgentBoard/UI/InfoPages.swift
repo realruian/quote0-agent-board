@@ -65,10 +65,10 @@ struct AboutPage: View {
             Card("图标") {
                 Row("在菜单栏显示图标", "状态牌是否正常、有几个对话在等你，看图标就知道",
                     isOn: Binding(get: { model.menuBarIcon }, set: { model.showMenuBarIcon($0) }))
-                Row("关闭窗口后保留程序坞图标", "关掉这一项，窗口一关 App 就离开程序坞，只留在菜单栏",
+                Row("关闭窗口后保留程序坞图标", "关掉这一项，窗口一关 App 就离开程序坞",
                     isOn: Binding(get: { model.keepsDockIcon }, set: { model.keepDockIcon($0) }))
             } footer: {
-                Text("两个图标至少留一个：隐藏菜单栏图标时，程序坞图标会保留。")
+                Text("两个图标可以都不留：状态牌照常在后台工作，再打开一次 App 就能回到这个窗口。")
             }
             Card("文件位置") {
                 location("设置", about["config"]?.string, Paths.config)

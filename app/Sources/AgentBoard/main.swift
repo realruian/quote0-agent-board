@@ -5,8 +5,9 @@
 // which can be turned off: it says whether the board is healthy and how many
 // conversations are waiting, and its menu shows the frame on the screen and the
 // conversations the frame has no room for. Closing the window leaves the board running; quitting the
-// app turns it off. The Dock icon can be set to go when the window closes, which
-// leaves the app in the menu bar alone: one of the two icons is always there.
+// app turns it off. The Dock icon can be set to go when the window closes. The two
+// icons are set apart from each other, and both may be off: opening the app again,
+// from Finder, Launchpad or Spotlight, brings the window back.
 
 import AppKit
 import BoardCore
@@ -107,11 +108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // The menu bar icon is optional now that the app is in the Dock. macOS remembers whether it is shown.
         statusItem.autosaveName = "board"
         statusItem.behavior = .removalAllowed
-        // The app has to be somewhere: when the menu bar icon goes, from the menu or dragged out of the bar, the Dock icon stays.
-        menuBarIcon = statusItem.observe(\.isVisible, options: [.initial]) { [weak self] item, _ in
-            if !item.isVisible { UserDefaults.standard.set(false, forKey: AppDelegate.leavesDock) }
-            self?.settleDock()
-        }
+        // The icon can also be dragged out of the bar, so the window's switch follows what the bar has.
+        menuBarIcon = statusItem.observe(\.isVisible, options: [.initial]) { [weak self] _, _ in self?.settleDock() }
         NSApp.mainMenu = mainMenu()
         // Opened by hand rather than at login: show the window, as opening an app should.
         let snapshot = Paths.isDevelopment && environment["AGENT_BOARD_SNAPSHOT"] != nil
@@ -409,7 +407,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func keepDockIcon(_ keeps: Bool) {
-        if !keeps { statusItem.isVisible = true }  // out of the Dock, the menu bar is the way back in
         UserDefaults.standard.set(!keeps, forKey: AppDelegate.leavesDock)
         settleDock()
     }
