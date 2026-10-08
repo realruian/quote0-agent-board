@@ -160,7 +160,7 @@ class RenderTest(unittest.TestCase):
         hidden = build_view(b, 3, {"hidden_projects": ["beta"]})
         self.assertEqual([r["title"] for r in hidden["rows"]], ["alpha"])
         one = build_view(b, 3, {"max_rows": 1})
-        self.assertEqual((len(one["rows"]), one["more"]), (1, 1))
+        self.assertEqual(len(one["rows"]), 1)
 
     def test_takeover_can_be_turned_off_per_kind(self):
         b = Board()
@@ -246,7 +246,7 @@ class RenderTest(unittest.TestCase):
         for i in range(6):
             b.apply("claude", "UserPromptSubmit", {"session_id": str(i), "cwd": f"/p/{i}"}, i)
         view = build_view(b, 10)
-        self.assertEqual((len(view["rows"]), view["more"]), (3, 3))
+        self.assertEqual([r["title"] for r in view["rows"]], ["5", "4", "3", "2"])  # every line goes to a conversation
 
 
 if __name__ == "__main__":

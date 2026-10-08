@@ -237,13 +237,8 @@ def build_view(board: Board, now: float | None = None, cfg: dict | None = None, 
         summary = " · ".join(f"{n} {label}" for n, label in counts if n)
         if all(s.state == DONE for s in shown):
             summary = "全部完成"
-        limit = min(opt["max_rows"], MAX_ROWS)
-        keep, more = len(shown), 0
-        if len(shown) > limit:  # the last line then says how many are not shown
-            keep = max(limit - 1, 1)
-            more = len(shown) - keep
         rows = []
-        for s in shown[:keep]:
+        for s in shown[:min(opt["max_rows"], MAX_ROWS)]:  # most urgent first; the rest wait for a free line
             # The agent's tag carries the state (solid while working, outlined once finished).
             # The right-hand column is how long the task has run, or took; or a word when it needs a look.
             row = {"state": s.state, "agent": AGENT_LABEL.get(s.source, s.source), "title": headline(s)}
@@ -255,7 +250,7 @@ def build_view(board: Board, now: float | None = None, cfg: dict | None = None, 
             else:
                 row["when"] = "等你" if s.state == WAITING else "出错"
             rows.append(row)
-        return {"kind": "list", "font": opt["font"], "summary": summary, "rows": rows, "more": more, "quota": quota}
+        return {"kind": "list", "font": opt["font"], "summary": summary, "rows": rows, "quota": quota}
 
     last = board.last_finished
     show_last = opt["idle_show_last"] and last and last["project"] not in hidden
@@ -541,8 +536,6 @@ def _render(view: dict) -> Image.Image:
         _text(draw, (name_x, y), _fit(draw, row["title"], name_font, name_width), font=name_font, fill=ink, anchor="lm")
         _text(draw, (W - MARGIN, y), row["when"], font=small, fill=ink, anchor="rm")
         y += ROW_PITCH
-    if view["more"]:
-        _text(draw, (name_x, y), f"还有 {view['more']} 个", font=small, fill=ink, anchor="lm")
     return img
 
 
