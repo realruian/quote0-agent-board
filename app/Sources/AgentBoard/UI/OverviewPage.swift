@@ -8,45 +8,46 @@ struct OverviewPage: View {
     private var missed: Bool { push?.ok == true && push?.delivered == false }
 
     var body: some View {
-        Form {
-            BannerRows(items: banners)
+        PageView(page: .overview) {
+            Banners(items: banners)
 
-            Section {
-                HStack(alignment: .center, spacing: 22) {
-                    VStack(spacing: 8) {
-                        ScreenView(image: model.frame, maxWidth: 330)
-                        Text(caption).font(.caption).foregroundStyle(.secondary)
-                    }
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(Array(lines.enumerated()), id: \.offset) { StatusLine(health: $0.element.0, text: $0.element.1) }
-                        if model.status.paused { Button("恢复") { model.apply(["paused": false], quietly: true) } }
-                        deviceLine
-                        HStack {
-                            Button("刷新屏幕", action: model.refreshScreen).glassButton()
-                            Button("发送测试画面", action: model.sendTestFrame).glassButton()
+            Card {
+                HStack(alignment: .center, spacing: 24) {
+                    ScreenView(image: model.frame, maxWidth: 300)
+                    VStack(alignment: .leading, spacing: 9) {
+                        ForEach(Array(lines.enumerated()), id: \.offset) {
+                            StatusLine(health: $0.element.0, text: $0.element.1).font(.system(size: 15, weight: .medium))
                         }
-                        .disabled(model.status.needsSetup)
-                        .padding(.top, 4)
+                        if !caption.isEmpty {
+                            Text(caption).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        }
+                        deviceLine.font(.system(size: 12)).foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            if model.status.paused { Button("恢复") { model.apply(["paused": false], quietly: true) } }
+                            Button("刷新屏幕", action: model.refreshScreen).disabled(model.status.needsSetup)
+                            Button("发送测试画面", action: model.sendTestFrame).disabled(model.status.needsSetup)
+                        }
+                        .padding(.top, 6)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 6)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 4)
             }
 
-            Section("剩余额度") {
+            Card("剩余额度") {
                 quota("Claude", model.status.usage?["claude"], needs: "需要在终端里登录过 Claude Code")
                 quota("Codex", model.status.usage?["codex"], needs: "Codex 回复一次后就有")
             }
 
-            Section("当前对话") {
+            Card("当前对话") {
                 if model.status.sessions.isEmpty {
                     Text("现在没有对话。在 Claude Code 或 Codex 里开始一个，就会出现在这里。").foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center).padding(.vertical, 8)
+                        .frame(maxWidth: .infinity, alignment: .center).padding(.vertical, 14)
                 }
                 ForEach(model.status.sessions, id: \.key) { session($0) }
             }
         }
-        .formStyle(.grouped)
         .onAppear { model.loadDevice() }
     }
 
@@ -64,8 +65,8 @@ struct OverviewPage: View {
     }
 
     private var caption: String {
-        guard let push = push else { return "还没有刷新过屏幕" }
-        return missed ? "最新画面，还没显示到屏幕上 · \(ago(push.at))发出（\(clock(push.at))）" : "屏幕当前画面 · \(ago(push.at))刷新（\(clock(push.at))）"
+        guard let push = push else { return "" }
+        return missed ? "最新画面在 \(clock(push.at)) 发出，\(ago(push.at))" : "屏幕上的画面在 \(clock(push.at)) 刷新，\(ago(push.at))"
     }
 
     /// One thing when all is well; the broken link named only when there is one.
@@ -102,17 +103,17 @@ struct OverviewPage: View {
     }
 
     private func quota(_ name: String, _ reading: AgentUsage?, needs: String) -> some View {
-        let parts = [(fiveHour, "5 小时"), (sevenDay, "本周")].compactMap { kind, label in
-            reading?.windows[kind].map { "\(label)剩 \($0.left)%" }
+        let meters = [(fiveHour, "5 小时"), (sevenDay, "本周")].compactMap { kind, label in
+            reading?.windows[kind].map { (label, $0.left) }
         }
         let observed = reading?.observedAt ?? 0
-        let text = parts.isEmpty
+        let detail = meters.isEmpty
             ? (observed != 0 ? "上次读数已过期（\(ago(observed))），等下一次读取" : "还没有数据，\(needs)")
-            : parts.joined(separator: " · ") + " · \(ago(observed))更新"
-        return LabeledContent {
-            Text(text)
-        } label: {
-            StatusLine(health: parts.isEmpty ? .attention : .good, text: name)
+            : "\(ago(observed))更新"
+        return Row(name, detail, health: meters.isEmpty ? .unknown : nil) {
+            HStack(spacing: 18) {
+                ForEach(meters, id: \.0) { Meter(label: $0.0, percent: $0.1) }
+            }
         }
     }
 
@@ -133,11 +134,8 @@ struct OverviewPage: View {
             default: return ("已完成", .green)
             }
         }()
-        return LabeledContent {
-            Text(label).font(.caption.weight(.medium)).foregroundStyle(color)
-                .padding(.horizontal, 9).padding(.vertical, 3).background(color.opacity(0.14), in: Capsule())
-        } label: {
-            RowLabel(own.isEmpty ? (alias.isEmpty ? s.project : alias) : own, details.compactMap { $0 }.joined(separator: " · "))
+        return Row(own.isEmpty ? (alias.isEmpty ? s.project : alias) : own, details.compactMap { $0 }.joined(separator: " · ")) {
+            Pill(text: label, color: color)
         }
     }
 }

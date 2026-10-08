@@ -26,6 +26,31 @@ extension View {
     }
 }
 
+/// One of the window's icons, in the colour of the text around it.
+struct IconView: View {
+    let icon: Icon
+    var size: CGFloat = 16
+
+    private static var drawn: [Icon: NSImage] = [:]
+
+    init(_ icon: Icon, size: CGFloat = 16) {
+        self.icon = icon
+        self.size = size
+    }
+
+    var body: some View {
+        Image(nsImage: image).renderingMode(.template).resizable().frame(width: size, height: size).accessibilityHidden(true)
+    }
+
+    private var image: NSImage {
+        if let image = IconView.drawn[icon] { return image }
+        let image = NSImage(data: Data(icon.svg.utf8)) ?? NSImage()
+        image.isTemplate = true
+        IconView.drawn[icon] = image
+        return image
+    }
+}
+
 /// The frame as the e-ink screen shows it: every dot kept sharp, in a dark bezel.
 struct ScreenView: View {
     let image: NSImage?
@@ -39,12 +64,50 @@ struct ScreenView: View {
                 Rectangle().fill(.white).aspectRatio(296.0 / 152.0, contentMode: .fit)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
         .padding(7)
-        .background(Color(white: 0.16), in: RoundedRectangle(cornerRadius: 10))
+        .background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white.opacity(0.1)))  // keeps its edge on a dark page
         .frame(maxWidth: maxWidth)
-        .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+        .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
         .accessibilityLabel("墨水屏画面")
+    }
+}
+
+/// How much of something is left, as a short bar and the figure. It turns orange when little is.
+struct Meter: View {
+    let label: String
+    let percent: Int
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Text(label).foregroundStyle(.secondary)
+            Capsule().fill(Color.primary.opacity(0.1)).frame(width: 52, height: 4)
+                .overlay(alignment: .leading) {
+                    Capsule().fill(percent < 15 ? Color.orange : Color.primary.opacity(0.75)).frame(width: 52 * CGFloat(min(max(percent, 0), 100)) / 100)
+                }
+            Text("\(percent)%").monospacedDigit().frame(minWidth: 32, alignment: .trailing)
+        }
+        .font(.system(size: 12))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label)剩 \(percent)%")
+    }
+}
+
+/// A state in a word, with its colour kept to a dot.
+struct Pill: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(text).font(.system(size: 12))
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 10)
+        .padding(.vertical, 4)
+        .overlay(Capsule().strokeBorder(Tone.line))
     }
 }
 
@@ -67,7 +130,7 @@ struct StatusLine: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Circle().fill(health.color).frame(width: 8, height: 8).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+            Dot(health: health).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1.5 }
             Text(text).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -82,56 +145,27 @@ struct BannerItem: Identifiable {
     var id: String { text }
 }
 
-/// Banners as the first group of a page's form. They are rows of the form itself:
-/// anything stacked above the form, or inset into its safe area, makes the page taller
-/// than the window and pushes the top of it under the title bar.
-struct BannerRows: View {
+/// Banners, above a page's first group.
+struct Banners: View {
     let items: [BannerItem]
+
+    private let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
     var body: some View {
         if !items.isEmpty {
-            Section {
+            VStack(spacing: 8) {
                 ForEach(items) { item in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                        IconView(.alert02).foregroundStyle(.orange).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
                         Text(item.text).fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 12)
-                        if let title = item.actionTitle { Button(title, action: item.action) }
+                        if let title = item.actionTitle { Button(title, action: item.action).controlSize(.small) }
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
+                    .background(Color.orange.opacity(0.07), in: shape)
+                    .overlay(shape.strokeBorder(Color.orange.opacity(0.22)))
                 }
-            }
-        }
-    }
-}
-
-/// The note under a group of settings.
-struct Footnote: View {
-    let text: String
-
-    init(_ text: String) {
-        self.text = text
-    }
-
-    var body: some View {
-        Text(text).frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-/// A row's name with a line under it that says what the setting does.
-struct RowLabel: View {
-    let title: String
-    var detail: String?
-
-    init(_ title: String, _ detail: String? = nil) {
-        self.title = title
-        self.detail = detail
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-            if let detail = detail {
-                Text(detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -148,15 +182,13 @@ struct NumberRow: View {
     @State private var draft = 0
 
     var body: some View {
-        LabeledContent {
+        Row(title, detail) {
             HStack(spacing: 6) {
-                TextField("", value: $draft, format: .number).labelsHidden().multilineTextAlignment(.trailing).frame(width: 56)
-                    .onSubmit(commit)
-                Stepper("", value: $draft, in: range).labelsHidden()
+                TextField(title, value: $draft, format: .number).labelsHidden().textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
+                    .frame(width: 56).onSubmit(commit)
+                Stepper(title, value: $draft, in: range).labelsHidden()
                 Text(unit).foregroundStyle(.secondary)
             }
-        } label: {
-            RowLabel(title, detail)
         }
         .onAppear { draft = value }
         .onChange(of: value) { _, new in draft = new }
@@ -186,7 +218,7 @@ struct ClockRow: View {
     }
 
     var body: some View {
-        DatePicker(title, selection: date, displayedComponents: .hourAndMinute)
+        Row(title) { DatePicker(title, selection: date, displayedComponents: .hourAndMinute).labelsHidden().fixedSize() }
     }
 }
 
@@ -195,13 +227,15 @@ struct NoticeView: View {
     let notice: Notice
 
     var body: some View {
-        Label(notice.text, systemImage: notice.isError ? "xmark.octagon.fill" : "checkmark.circle.fill")
-            .symbolRenderingMode(.multicolor)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
-            .glass(cornerRadius: 20)
-            .padding(.bottom, 18)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+        HStack(spacing: 7) {
+            IconView(notice.isError ? .cancelCircle : .checkmarkCircle02).foregroundStyle(notice.isError ? .red : .green)
+            Text(notice.text)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .glass(cornerRadius: 20)
+        .padding(.bottom, 18)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
 

@@ -74,6 +74,7 @@ def bundle(binary: Path) -> Path:
     shutil.copytree(ROOT / "agent_board" / "fonts", resources / "fonts")  # the pixel font, with its licence
     shutil.copy2(ROOT / "bin" / "agent-board-hook", resources)
     shutil.copy2(ROOT / "LICENSE", resources)
+    shutil.copy2(ROOT / "app" / "Hugeicons-LICENSE.md", resources)  # the window's icons
     with open(app / "Contents" / "Info.plist", "wb") as f:
         plistlib.dump({
             "CFBundleIdentifier": IDENTIFIER,

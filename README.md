@@ -88,7 +88,7 @@ flowchart TB
 
 ## Swift 版 App（这个分支上的试验）
 
-这个分支把后台进程用 Swift 重写了一遍，做成了一个普通的 Mac App：程序坞里有图标，设置在它自己的窗口里，菜单栏上有一个显示状态的小图标，不再需要 Python。窗口是用 SwiftUI 写的原生界面，在 macOS 26 及以上带系统的 Liquid Glass 效果；需要 macOS 14 或更新版本。配置文件和钩子与 Python 版通用，两个版本可以来回切换。
+这个分支把后台进程用 Swift 重写了一遍，做成了一个普通的 Mac App：程序坞里有图标，设置在它自己的窗口里，菜单栏上有一个显示状态的小图标，不再需要 Python。窗口是用 SwiftUI 写的原生界面；需要 macOS 14 或更新版本。配置文件和钩子与 Python 版通用，两个版本可以来回切换。
 
 ```bash
 python3 scripts/build_app.py
@@ -188,6 +188,8 @@ python3 install.py --device <设备序列号>
 装好后点菜单栏图标里的「打开设置…」，或者在浏览器里打开 <http://127.0.0.1:8765>。
 
 <img src="docs/images/settings.png" width="735" alt="设置页">
+
+图为 Swift 版 App 的窗口；浏览器里的设置页是同样的几个页面。
 
 | 页面 | 能做什么 |
 |---|---|
@@ -305,6 +307,7 @@ AGENT_BOARD_HOME="$PWD/.dev-home" AGENT_BOARD_DRY_RUN=1 AGENT_BOARD_PORT=8766 py
 
 - 功能设计参考了 [Vibe Island](https://vibeisland.app)。
 - 随项目附带的像素字体是 [方舟像素字体](https://github.com/TakWolf/ark-pixel-font)，按 SIL OFL 1.1 许可分发，许可全文在 `agent_board/fonts/ark-pixel-OFL.txt`。
+- Swift 版窗口里的图标来自 [Hugeicons](https://hugeicons.com) 的免费图标集，按 MIT 许可分发，许可全文在 `app/Hugeicons-LICENSE.md`。
 - 这是个人项目，和 MindReset、Anthropic、OpenAI、Vibe Island 都没有关联。屏幕上的 Agent 图标只用来标识对应的产品，App 图标里的锯齿圆形取自 Dot. App 的图标，表示它运行在 Dot. 的设备上；相关名称和标志归各自的所有者。
 
 ## 许可证

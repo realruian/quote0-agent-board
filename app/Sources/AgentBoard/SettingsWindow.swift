@@ -16,12 +16,18 @@ final class SettingsWindow {
     private let model: BoardModel
     private var window: NSWindow?
     private var pageChanges: AnyCancellable?
+    private var closing: NSObjectProtocol?
+    /// Called once the window has closed.
+    var onClose: (() -> Void)?
     /// In development, a file to save a picture of the window to; the app then quits.
     private let snapshot = ProcessInfo.processInfo.environment["AGENT_BOARD_SNAPSHOT"]
 
     init(model: BoardModel) {
         self.model = model
     }
+
+    /// Whether the window is there to come back to: on screen, or minimised into the Dock.
+    var isOpen: Bool { window.map { $0.isVisible || $0.isMiniaturized } ?? false }
 
     /// Bring the window forward, on `page` when one is asked for.
     func show(_ page: Page? = nil) {
@@ -44,20 +50,30 @@ final class SettingsWindow {
 
     private func build() {
         let host = NSHostingController(rootView: RootView(model: model))
-        host.sceneBridgingOptions = [.toolbars, .title]  // the sidebar and the page title go into the window's own bar
         let window = snapshot == nil ? NSWindow(contentViewController: host) : UnseenWindow(contentViewController: host)
+        // The pages name themselves and the window is drawn right up to its top edge, so the bar is empty
+        // and clear. It is still there: with it the three buttons and the window's corners are where they
+        // are in Finder or Mail, and without it they are those of a small utility window.
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.toolbar = NSToolbar(identifier: "main")
         window.toolbarStyle = .unified
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
         window.title = "Agent 状态牌"
-        window.isReleasedWhenClosed = false  // closing it leaves the board running; it opens again from the Dock
+        window.isReleasedWhenClosed = false  // closing it leaves the board running; it opens again from the Dock or the menu bar
         window.setContentSize(NSSize(width: 920, height: 660))
         window.center()
         window.setFrameAutosaveName("main")
+        // In development, the picture can be taken in the dark appearance whatever the system is set to.
+        if snapshot != nil, ProcessInfo.processInfo.environment["AGENT_BOARD_DARK"] != nil { window.appearance = NSAppearance(named: .darkAqua) }
         self.window = window
         // A page that comes up should not hand the keyboard to its first field: the window
         // scrolls to wherever the cursor is, and nobody asked to type yet.
         pageChanges = model.$page.sink { [weak window] _ in
             DispatchQueue.main.async { window?.makeFirstResponder(nil) }
+        }
+        closing = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
+            DispatchQueue.main.async { self?.onClose?() }  // after it has gone, not as it is about to
         }
     }
 

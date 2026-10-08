@@ -27,29 +27,32 @@ enum Page: String, CaseIterable, Identifiable {
         }
     }
 
-    var symbol: String {
+    /// What the page is for, in a line under its name.
+    var summary: String {
         switch self {
-        case .overview: return "square.grid.2x2.fill"
-        case .display: return "display"
-        case .refresh: return "arrow.triangle.2.circlepath"
-        case .alerts: return "bell.fill"
-        case .agents: return "powerplug.fill"
-        case .device, .setup: return "wifi"
-        case .diagnostics: return "waveform.path.ecg"
-        case .about: return "info.circle.fill"
+        case .overview: return "屏幕上现在是什么，各个 Agent 在做什么"
+        case .display: return "屏幕上显示哪些内容，用什么字体"
+        case .refresh: return "屏幕什么时候更新，什么时候不更新"
+        case .alerts: return "哪些情况占用整块屏幕来提醒你"
+        case .agents: return "状态牌显示哪些 Agent 的对话"
+        case .device: return "正在使用的 Quote/0"
+        case .diagnostics: return "从钩子到屏幕逐项检查，查看日志"
+        case .about: return "版本、文件位置和卸载"
+        case .setup: return "三步把状态牌连到你的 Quote/0"
         }
     }
 
-    var tint: Color {
+    /// Drawn in outline and in one colour, like the screen the board is for.
+    var icon: Icon {
         switch self {
-        case .overview: return .blue
-        case .display: return .purple
-        case .refresh: return .cyan
-        case .alerts: return .red
-        case .agents: return .green
-        case .device, .setup: return .orange
-        case .diagnostics: return .teal
-        case .about: return .gray
+        case .overview: return .dashboardSquare01
+        case .display: return .listView
+        case .refresh: return .refresh
+        case .alerts: return .notification01
+        case .agents: return .commandLine
+        case .device, .setup: return .tabletConnectedWifi
+        case .diagnostics: return .pulse01
+        case .about: return .informationCircle
         }
     }
 }
