@@ -17,13 +17,17 @@ from .render import build_view, render, to_png
 from .state import Board
 
 
+def _state() -> dict:
+    try:
+        return json.loads((config.home() / "state.json").read_text())
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
 def _board() -> Board:
     cfg = config.load()
     board = Board(done_ttl=cfg["done_ttl_minutes"] * 60, stale_running=cfg["stale_running_minutes"] * 60)
-    try:
-        board.load_dict(json.loads((config.home() / "state.json").read_text()).get("board", {}))
-    except (FileNotFoundError, ValueError):
-        pass
+    board.load_dict(_state().get("board", {}))
     return board
 
 
@@ -41,6 +45,8 @@ def main(argv: list[str]) -> int:
     board = _board()
     if command == "status":
         print("daemon:", "running" if _daemon_alive() else "not running")
+        if _state().get("last_push", {}).get("delivered") is False:
+            print("device: asleep or offline, the screen is not showing the latest frame")
         shown = board.visible()
         if not shown:
             print("no active sessions")

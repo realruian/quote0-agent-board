@@ -27,6 +27,7 @@ log = logging.getLogger("agent_board")
 WEB_DIR = Path(__file__).parent / "web"
 STATIC = {"app.css": "text/css; charset=utf-8", "app.js": "text/javascript; charset=utf-8"}
 HOLD_INTERVAL_MS = 12 * 60 * 60 * 1000  # the device API's maximum
+MAX_INTERVAL_MINUTES = HOLD_INTERVAL_MS // 60000  # and its minimum is one minute
 DEFAULT_INTERVAL_MS = 5 * 60 * 1000
 MAX_BODY = 65536
 LOG_TAIL_BYTES = 48_000
@@ -125,6 +126,7 @@ def device(app) -> dict:
     info.update(
         ok=True,
         status=status.get("status") or {},
+        asleep=dot_api.asleep(status),
         last_render=(status.get("renderInfo") or {}).get("last", ""),
         alias=current.get("alias") or "",
         timezone=current.get("timezone", ""),
@@ -159,6 +161,11 @@ def save_device(app, body: dict) -> dict:
             if not previous or previous == HOLD_INTERVAL_MS:
                 previous = DEFAULT_INTERVAL_MS
             change["interval"] = {"powerMs": previous}
+    if "battery_minutes" in body:
+        minutes = body["battery_minutes"]
+        if isinstance(minutes, bool) or not isinstance(minutes, int) or not 1 <= minutes <= MAX_INTERVAL_MINUTES:
+            raise Problem(f"电池唤醒间隔需要是 1 到 {MAX_INTERVAL_MINUTES} 之间的整数分钟")
+        change.setdefault("interval", {})["batteryMs"] = minutes * 60000
     if "sleep" in body:
         sleep = body["sleep"]
         try:
@@ -267,7 +274,8 @@ def run_checks(app) -> dict:
             add(label, None, "本机没有找到读数")
     last = app.last_push
     if last:
-        add("最近一次推送", last.get("ok", False),
+        # accepted by the service but not on the screen yet: worth a look, not a fault
+        add("最近一次推送", None if last.get("ok") and last.get("delivered") is False else last.get("ok", False),
             f"{_ago(time.time() - last['at'])}前，{last.get('message', '')}")
     else:
         add("最近一次推送", None, "启动后还没有推送过")

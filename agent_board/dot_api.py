@@ -75,10 +75,21 @@ def set_intervals(cfg: dict, power_ms: int | None = None, battery_ms: int | None
     return _call(cfg, "POST", "settings", {"interval": interval})
 
 
-def showing_image_slot(cfg: dict) -> bool | None:
-    """Whether the device's current frame comes from the Image API slot the board
-    writes to. None when the status does not say what is on screen."""
-    current = (get_status(cfg).get("renderInfo") or {}).get("current") or {}
+def delivered(message: str) -> bool:
+    """Whether the reply to a push says the frame is on the screen. A sleeping or
+    offline device has the frame kept for it and shows it when it next wakes."""
+    return "休眠" not in message and "离线" not in message
+
+
+def asleep(status: dict) -> bool:
+    """Whether a `get_status` result says the device is sleeping to save battery."""
+    return "休眠" in ((status.get("status") or {}).get("current") or "")
+
+
+def showing_image_slot(status: dict) -> bool | None:
+    """Whether the frame a `get_status` result reports comes from the Image API slot
+    the board writes to. None when the status does not say what is on screen."""
+    current = (status.get("renderInfo") or {}).get("current") or {}
     images = current.get("image") or []
     if not images:
         return None

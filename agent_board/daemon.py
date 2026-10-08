@@ -238,7 +238,8 @@ class App:
             failures = 0
             self.last_sig = sig
             self.last_push_at = time.time()
-            self.last_push = {"at": self.last_push_at, "ok": True, "kind": view["kind"], "message": message}
+            self.last_push = {"at": self.last_push_at, "ok": True, "kind": view["kind"], "message": message,
+                              "delivered": dot_api.delivered(message)}
             self._save()
 
     async def refresh_names(self) -> None:
@@ -277,17 +278,23 @@ class App:
             log.warning("could not read quota: %s", e)
 
     async def check_screen(self) -> None:
-        """Put the board back if the device has moved on to other loop content."""
-        if self.dry_run or not self.cfg["keep_on_screen"] or not self.last_sig:
+        """Put the board back if the device has moved on to other loop content, and
+        send the current frame once a device that slept through one is awake again."""
+        missed = self.last_push.get("delivered") is False
+        if self.dry_run or not self.last_sig or not (missed or self.cfg["keep_on_screen"]):
             return
         if time.time() - self.last_push_at < 20:  # a frame of ours is still on its way
             return
         try:
-            ours = await asyncio.to_thread(dot_api.showing_image_slot, self.cfg)
+            status = await asyncio.to_thread(dot_api.get_status, self.cfg)
         except Exception as e:
             log.warning("could not check what the device is showing: %s", e)
             return
-        if ours is False:  # None means the device did not say; leave it alone
+        if missed:
+            if not dot_api.asleep(status):
+                log.info("the device is awake again; sending the frame it missed")
+                self.force_refresh()
+        elif dot_api.showing_image_slot(status) is False:  # None means the device did not say; leave it alone
             log.info("the device is showing other content; putting the board back")
             self.force_refresh()
 

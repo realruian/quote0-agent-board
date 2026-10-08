@@ -149,13 +149,13 @@ Once installed, open <http://127.0.0.1:8765> in your browser.
 | 显示 Display | Font, whether to show conversation names and quota, number of rows, how long finished conversations stay, project aliases and hidden projects |
 | 提醒 Alerts | Which situations take over the screen, the minimum refresh interval, quiet hours |
 | 集成 Integrations | Turn the Claude Code and Codex hooks on and off separately |
-| 设备 Device | Signal, power and firmware; device name, whether the board stays on screen, the device's sleep hours |
+| 设备 Device | Signal, power and firmware; device name, whether the board stays on screen, the wake interval on battery, the device's sleep hours |
 | 诊断 Diagnostics | One-click self-check, log viewer, restart the daemon |
 | 关于 About | Version and file locations |
 
 Changes are saved automatically and take effect at once. They are stored in `~/.quote0-agent-board/config.json`. The port is `web_port` in that file; restart the daemon after changing it.
 
-Only fonts present on the machine are offered: PingFang (default), MiSans, Hiragino Sans GB, and the Ark Pixel font that ships with the project. The display has no greys and text is drawn without anti-aliasing, so stroke weight differs between fonts.
+Only fonts present on the machine are offered: PingFang (default), MiSans, Hiragino Sans GB, and the Ark Pixel font that ships with the project. The display has no greys and text is drawn without anti-aliasing, so stroke weight differs between fonts. When the chosen font lacks a character, that one character is drawn in Hiragino Sans GB instead of showing as an empty box; Ark Pixel currently lacks about one common Chinese character in twenty (然, 热 and 鉴, for example).
 
 ## Remaining quota
 
@@ -232,7 +232,7 @@ python3 -m agent_board.cli status
 - **"Waiting for approval" lingers after you approve**: agent hooks have no "user approved" event, so the board only returns to running when that command finishes. Long commands are misreported meanwhile.
 - **Interrupting with Esc still shows running**: an interrupt fires no end event. The row clears when you send the next message, or after 60 minutes.
 - **No full-screen alert for errors or completion**: only approvals, questions and plans take over the screen.
-- **The device must be plugged in**: on battery it sleeps and the status lags.
+- **The device must be plugged in**: on battery it sleeps and only updates at the moment of each scheduled wake-up, so the screen stays on the frame from before it slept. The Overview and Device pages of the settings console then say the device is asleep, and so does the `status` command; once the device wakes, the latest frame is sent again automatically.
 - **Depends on MindReset's cloud service**: when your computer is offline or the service is unavailable, the screen stays on its last frame.
 - **Chinese only**: both the settings page and the text on the screen.
 - **Used long-term on the author's own setup only**: Quote/0 firmware 2.0.8 with the Claude and Codex desktop apps.

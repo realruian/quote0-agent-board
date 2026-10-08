@@ -9,11 +9,12 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 _HOME = tempfile.TemporaryDirectory()
 os.environ["AGENT_BOARD_HOME"] = _HOME.name
 
-from agent_board import config, hooks, web  # noqa: E402
+from agent_board import config, dot_api, hooks, web  # noqa: E402
 from agent_board.daemon import App, in_quiet_hours  # noqa: E402
 
 
@@ -70,6 +71,40 @@ class HooksTest(unittest.TestCase):
             self.assertEqual(data["hooks"]["PreCompact"], [other])
             self.assertEqual(hooks.edit(path, None), "updated")
             self.assertEqual(path.read_text(), original)
+
+
+class SleepingDeviceTest(unittest.IsolatedAsyncioTestCase):
+    # The app is built inside the running loop: before Python 3.10 its asyncio
+    # primitives belong to the loop that is current when they are created.
+    ASLEEP = {"status": {"current": "休眠中"}}
+    AWAKE = {"status": {"current": "电源活跃"}}
+
+    async def check(self, app, status):
+        with mock.patch.object(dot_api, "get_status", return_value=status):
+            await app.check_screen()
+
+    def test_push_reply_says_whether_the_frame_is_on_screen(self):
+        self.assertTrue(dot_api.delivered("设备 D0 图片 API 内容已切换。"))
+        self.assertFalse(dot_api.delivered("设备 D0 当前休眠或离线，文本 API 内容已更新，将在下次内容切换时显示。"))
+        self.assertTrue(dot_api.asleep(self.ASLEEP))
+        self.assertFalse(dot_api.asleep(self.AWAKE))
+        self.assertFalse(dot_api.asleep({}))
+
+    async def test_missed_frame_is_sent_again_once_the_device_wakes(self):
+        app = App({**config.load(), "keep_on_screen": False})
+        app.last_sig, app.last_push = "sig", {"at": 1, "ok": True, "delivered": False}
+        await self.check(app, self.ASLEEP)
+        self.assertEqual(app.last_sig, "sig")
+        await self.check(app, self.AWAKE)
+        self.assertEqual(app.last_sig, "")
+
+    async def test_board_is_put_back_when_other_content_is_on_screen(self):
+        app = App({**config.load(), "keep_on_screen": True})
+        app.last_sig, app.last_push = "sig", {"at": 1, "ok": True, "delivered": True}
+        await self.check(app, {"renderInfo": {"current": {"image": ["https://cdn/mindreset.image_api/a.png"]}}})
+        self.assertEqual(app.last_sig, "sig")
+        await self.check(app, {"renderInfo": {"current": {"image": ["https://cdn/mindreset.text_api/a.png"]}}})
+        self.assertEqual(app.last_sig, "")
 
 
 class ConsoleTest(unittest.TestCase):
@@ -141,6 +176,15 @@ class ConsoleTest(unittest.TestCase):
         self.assertEqual((status, content_type, png[:4]), (200, "image/png", b"\x89PNG"))
         self.assertEqual(self.app.cfg, before)
         self.assertEqual(self.request("POST", "/api/preview", {"sample": "nope"})[0], 400)
+
+    def test_battery_wake_interval_is_checked_and_sent_alone(self):
+        sent = []
+        with mock.patch.object(dot_api, "update_settings", side_effect=lambda cfg, body: sent.append(body)), \
+                mock.patch.object(web, "device", return_value={"ok": True}):
+            self.assertEqual(self.request("POST", "/api/device", {"battery_minutes": 30})[0], 200)
+            for bad in (0, 721, 2.5, "30", True):
+                self.assertEqual(self.request("POST", "/api/device", {"battery_minutes": bad})[0], 400)
+        self.assertEqual(sent, [{"interval": {"batteryMs": 1_800_000}}])
 
     def test_overview_lists_sessions(self):
         self.app.call(self.app.on_event, "claude", "UserPromptSubmit", {"session_id": "s", "cwd": "/p/alpha"})

@@ -209,6 +209,18 @@ async function overviewPage(mount, onLeave) {
   const quota = h("div", { class: "card" });
   const banner = h("div");
   let frameVersion = null;
+  let device = null;
+  let lastPush = {};
+  let dryRun = false;
+
+  // A sleeping device keeps its old frame: say so, or the stale screen looks like a fault.
+  function drawBanner() {
+    const missed = lastPush.ok && lastPush.delivered === false;
+    const since = device && device.last_render ? `，屏幕停在 ${device.last_render} 的画面` : "";
+    banner.replaceChildren(
+      dryRun ? h("div", { class: "banner" }, "空跑模式：画面只在本机渲染，不会发到屏幕上。") : "",
+      missed ? h("div", { class: "banner" }, `设备休眠或离线，最新画面没有显示出来${since}。接上电源后会自动补上；用电池时要等它下次唤醒。`) : "");
+  }
 
   const WINDOW = { five_hour: "5 小时", seven_day: "本周" };
   function quotaRow(name, reading) {
@@ -237,7 +249,9 @@ async function overviewPage(mount, onLeave) {
 
   api("/api/device").then((d) => {
     const s = d.status || {};
-    deviceLine.replaceChildren(dot(d.ok ? "ok" : "bad"),
+    device = d;
+    drawBanner();
+    deviceLine.replaceChildren(dot(!d.ok ? "bad" : d.asleep ? "warn" : "ok"),
       d.ok ? `设备：${[s.current, s.battery, s.wifi && `Wi-Fi ${s.wifi}`].filter(Boolean).join(" · ")}` : `设备：连接失败（${d.error || "未知原因"}）`);
   }).catch((error) => deviceLine.replaceChildren(dot("bad"), `设备：${error.message}`));
 
@@ -249,18 +263,24 @@ async function overviewPage(mount, onLeave) {
       lines.replaceChildren(h("div", null, dot("bad"), error.message));
       return;
     }
-    banner.replaceChildren(data.dry_run ? h("div", { class: "banner" }, "空跑模式：画面只在本机渲染，不会发到屏幕上。") : "");
     const push = data.last_push || {};
+    const missed = push.ok && push.delivered === false;
+    lastPush = push;
+    dryRun = data.dry_run;
+    drawBanner();
     const pushedAt = push.at || 0;
     if (pushedAt !== frameVersion) {
       frameVersion = pushedAt;
       view.img.src = `/api/frame.png?v=${pushedAt}`;
     }
-    view.caption.textContent = push.at ? `屏幕当前画面 · ${ago(push.at)}刷新（${clock(push.at)}）` : "还没有推送过画面";
+    view.caption.textContent = !push.at ? "还没有推送过画面"
+      : missed ? `最新画面，还没显示到屏幕上 · ${ago(push.at)}推送（${clock(push.at)}）`
+      : `屏幕当前画面 · ${ago(push.at)}刷新（${clock(push.at)}）`;
     const quiet = data.view_kind === "quiet";
     lines.replaceChildren(
       h("div", null, dot("ok"), `后台进程运行中 · ${ago(data.started_at)}启动`),
-      push.at ? h("div", null, dot(push.ok ? "ok" : "bad"), push.ok ? "最近一次推送成功" : `最近一次推送失败：${push.message}`) : "",
+      push.at ? h("div", null, dot(!push.ok ? "bad" : missed ? "warn" : "ok"),
+        !push.ok ? `最近一次推送失败：${push.message}` : missed ? "最近一次推送未送达：设备休眠或离线" : "最近一次推送成功") : "",
       quiet ? h("div", null, dot("warn"), "夜间免打扰中，屏幕暂不刷新") : "");
     quota.replaceChildren(quotaRow("Claude", data.usage.claude), quotaRow("Codex", data.usage.codex));
     sessions.replaceChildren(...(data.sessions.length
@@ -451,14 +471,18 @@ async function devicePage(mount) {
       }
     };
     const alias = h("input", { class: "field name", type: "text", value: d.alias, placeholder: "未命名", maxLength: 100, "aria-label": "设备名称" });
+    const WAKE = [[5, "5 分钟"], [10, "10 分钟"], [15, "15 分钟"], [30, "30 分钟"], [60, "1 小时"], [180, "3 小时"], [360, "6 小时"], [720, "12 小时"]];
+    const wakeOptions = (WAKE.some(([m]) => m === d.battery_minutes) ? WAKE : [...WAKE, [d.battery_minutes, `${d.battery_minutes} 分钟`]])
+      .sort((a, b) => a[0] - b[0]).map(([m, text]) => [String(m), text]);
     const sleep = { ...d.sleep };
     const saveSleep = (patch) => apply({ sleep: Object.assign(sleep, patch) }, "睡眠时段已保存");
 
     body.replaceChildren(
       d.image_slot ? "" : h("div", { class: "banner" }, "设备的循环列表里没有“图像 API”，状态牌发不上去。请在 Dot. App 的内容工坊里添加。"),
+      d.asleep ? h("div", { class: "banner" }, `设备休眠中，状态牌不会实时更新。接上电源可以唤醒；用电池时每 ${d.battery_minutes} 分钟唤醒一次。`) : "",
       section("状态"),
       card(
-        info("当前状态", h("span", null, dot("ok"), s.current || "未知")),
+        info("当前状态", h("span", null, dot(d.asleep ? "warn" : "ok"), s.current || "未知")),
         info("供电", s.battery || "未知"),
         info("Wi-Fi 信号", s.wifi || "未知"),
         info("固件版本", s.version || "未知"),
@@ -469,13 +493,15 @@ async function devicePage(mount) {
       card(
         row("设备名称", "显示在 Dot. App 里", alias, button("保存", () => apply({ alias: alias.value }, "名称已保存"))),
         row("保持状态牌常显", d.hold ? "插电时循环间隔为 12 小时，其他内容不会顶掉状态牌" : `插电时每 ${d.power_minutes} 分钟轮换一次，状态牌会被其他内容顶掉`,
-          toggle(d.hold, (on) => apply({ hold: on }, on ? "已开启常显" : "已恢复轮换"), "保持状态牌常显"))),
+          toggle(d.hold, (on) => apply({ hold: on }, on ? "已开启常显" : "已恢复轮换"), "保持状态牌常显")),
+        row("用电池时的唤醒间隔", "不插电时设备休眠，每隔这么久醒来更新一次；间隔越短越耗电。插电时不受这个限制，有变化就刷新",
+          select(wakeOptions, String(d.battery_minutes), (v) => apply({ battery_minutes: Number(v) }, "唤醒间隔已保存"), "用电池时的唤醒间隔"))),
       section("设备睡眠时段"),
       card(
         row("开启睡眠", "这是设备自带的功能：时段内设备整体休眠，所有内容都不更新", toggle(!!sleep.enabled, (on) => saveSleep({ enabled: on }), "开启设备睡眠")),
         row("开始时间", null, timeField(sleep.start || "23:00", (v) => saveSleep({ start: v }))),
         row("结束时间", null, timeField(sleep.end || "07:00", (v) => saveSleep({ end: v })))),
-      hint(`时区 ${d.timezone || "未知"} · 用电池时每 ${d.battery_minutes} 分钟唤醒一次。更换密钥或设备需要重新运行安装命令。`));
+      hint(`时区 ${d.timezone || "未知"}。更换密钥或设备需要重新运行安装命令。`));
   }
 
   async function load() {

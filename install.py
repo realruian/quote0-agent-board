@@ -19,6 +19,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -42,7 +43,12 @@ def launchctl(*args: str) -> subprocess.CompletedProcess:
 
 
 def stop_agent() -> None:
-    launchctl("bootout", f"gui/{os.getuid()}/{LABEL}")
+    target = f"gui/{os.getuid()}/{LABEL}"
+    launchctl("bootout", target)
+    for _ in range(50):  # bootout returns before the process is gone, and bootstrap fails until it is
+        if launchctl("print", target).returncode:
+            return
+        time.sleep(0.1)
 
 
 def start_agent() -> None:
