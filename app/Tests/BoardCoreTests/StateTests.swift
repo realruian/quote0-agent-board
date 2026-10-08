@@ -49,6 +49,17 @@ final class StateTests: BoardTestCase {
         XCTAssertEqual(states(b, 4), ["alpha waiting", "beta error"])
     }
 
+    func testToolCallsDoNotReorderRunningSessions() {
+        let b = Board()
+        b.apply("claude", "UserPromptSubmit", alpha, now: 1)
+        b.apply("claude", "UserPromptSubmit", beta, now: 2)
+        XCTAssertEqual(states(b, 2), ["beta running", "alpha running"])
+        // the older turn working does not move it up: that would redraw the screen for every tool call
+        XCTAssertFalse(b.apply("claude", "PreToolUse", alpha.with(["tool_name": "Read"]), now: 3))
+        XCTAssertFalse(b.apply("claude", "PostToolUse", alpha.with(["tool_name": "Read"]), now: 4))
+        XCTAssertEqual(states(b, 4), ["beta running", "alpha running"])
+    }
+
     func testBackgroundSubagentDoesNotReviveFinishedSession() {
         let b = Board()
         b.apply("claude", "UserPromptSubmit", alpha, now: 1)

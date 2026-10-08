@@ -88,6 +88,10 @@ public struct Session: Codable, Equatable {
 
     /// The identity the agent gave the conversation, without the agent's own prefix.
     var id: String { key.split(separator: ":", maxSplits: 1).dropFirst().first.map(String.init) ?? "" }
+
+    /// When the session came to the state it is in. Tool calls do not move it, so
+    /// rows ordered by it keep their places while the agents work.
+    var since: Double { state == .waiting ? waitingSince : state == .running ? startedAt : finishedAt }
 }
 
 public struct LastFinished: Codable, Equatable {
@@ -206,13 +210,13 @@ public final class Board {
 
     // MARK: views
 
-    /// Sessions worth showing, most urgent first.
+    /// Sessions worth showing, most urgent first; within a state, the newest first.
     public func visible(_ now: Double = Date().timeIntervalSince1970) -> [Session] {
         sessions.values
             .filter { $0.state == .running || $0.state == .waiting || (($0.state == .done || $0.state == .error) && now - $0.finishedAt < doneTTL) }
             .sorted {
                 if $0.state.sortOrder != $1.state.sortOrder { return $0.state.sortOrder < $1.state.sortOrder }
-                if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+                if $0.since != $1.since { return $0.since > $1.since }
                 return (arrival[$0.key] ?? 0) < (arrival[$1.key] ?? 0)
             }
     }

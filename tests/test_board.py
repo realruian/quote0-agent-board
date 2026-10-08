@@ -53,6 +53,16 @@ class BoardTest(unittest.TestCase):
         b.apply("claude", "PermissionRequest", {**A, "tool_name": "Edit"}, 4)
         self.assertEqual(states(b, 4), [("alpha", WAITING), ("beta", ERROR)])
 
+    def test_tool_calls_do_not_reorder_running_sessions(self):
+        b = Board()
+        b.apply("claude", "UserPromptSubmit", A, 1)
+        b.apply("claude", "UserPromptSubmit", B, 2)
+        self.assertEqual(states(b, 2), [("beta", RUNNING), ("alpha", RUNNING)])
+        # the older turn working does not move it up: that would redraw the screen for every tool call
+        self.assertFalse(b.apply("claude", "PreToolUse", {**A, "tool_name": "Read"}, 3))
+        self.assertFalse(b.apply("claude", "PostToolUse", {**A, "tool_name": "Read"}, 4))
+        self.assertEqual(states(b, 4), [("beta", RUNNING), ("alpha", RUNNING)])
+
     def test_background_subagent_does_not_revive_finished_session(self):
         b = Board()
         b.apply("claude", "UserPromptSubmit", A, 1)

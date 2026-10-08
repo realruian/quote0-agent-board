@@ -155,7 +155,7 @@ class Board:
     # -- views ----------------------------------------------------------
 
     def visible(self, now: float | None = None) -> list[Session]:
-        """Sessions worth showing, most urgent first."""
+        """Sessions worth showing, most urgent first; within a state, the newest first."""
         now = time.time() if now is None else now
         shown = [
             s
@@ -163,7 +163,9 @@ class Board:
             if s.state in (RUNNING, WAITING)
             or (s.state in (DONE, ERROR) and now - s.finished_at < self.done_ttl)
         ]
-        shown.sort(key=lambda s: (_SORT_ORDER[s.state], -s.updated_at))
+        # Ordered by when a session came to its state: tool calls do not move it, so rows keep their places.
+        since = {WAITING: lambda s: s.waiting_since, RUNNING: lambda s: s.started_at}
+        shown.sort(key=lambda s: (_SORT_ORDER[s.state], -since.get(s.state, lambda s: s.finished_at)(s)))
         return shown
 
     def _snapshot(self, now: float) -> list[tuple]:
