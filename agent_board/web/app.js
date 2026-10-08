@@ -471,7 +471,7 @@ async function devicePage(mount) {
       }
     };
     const alias = h("input", { class: "field name", type: "text", value: d.alias, placeholder: "未命名", maxLength: 100, "aria-label": "设备名称" });
-    const WAKE = [[5, "5 分钟"], [10, "10 分钟"], [15, "15 分钟"], [30, "30 分钟"], [60, "1 小时"], [180, "3 小时"], [360, "6 小时"], [720, "12 小时"]];
+    const WAKE = [[1, "1 分钟"], [5, "5 分钟"], [10, "10 分钟"], [15, "15 分钟"], [30, "30 分钟"], [60, "1 小时"], [180, "3 小时"], [360, "6 小时"], [720, "12 小时"]];
     const wakeOptions = (WAKE.some(([m]) => m === d.battery_minutes) ? WAKE : [...WAKE, [d.battery_minutes, `${d.battery_minutes} 分钟`]])
       .sort((a, b) => a[0] - b[0]).map(([m, text]) => [String(m), text]);
     const sleep = { ...d.sleep };

@@ -51,12 +51,20 @@ FONTS = {
     "arkpixel": ("方舟像素", (_ARK_PIXEL, "Ark Pixel 12px Prop zh-Hans", "Regular"),
                  (_ARK_PIXEL, "Ark Pixel 12px Prop zh-Hans", "Regular")),
 }
-# Pixel fonts are drawn dot by dot for one size; they are only sharp at whole multiples of it.
+# Pixel fonts are drawn dot by dot for one size and are only sharp at whole multiples
+# of it. A role keeps to a multiple when one is close to its size; otherwise it is drawn
+# at its own size, with uneven strokes, rather than visibly smaller than other fonts.
 PIXEL_FONTS = {"arkpixel": 12}
+PIXEL_SNAP = 0.85  # how far below a role's size a multiple may fall and still be used
 # Used when the chosen family is not installed, so a frame can always be drawn:
 # two system fonts, then the font that ships with this project.
 FALLBACK_FACES = [(_HIRAGINO, "Hiragino Sans GB", "W3"), ("/System/Library/Fonts/STHeiti Medium.ttc", "Heiti SC", "Medium"),
                   (_ARK_PIXEL, "Ark Pixel 12px Prop zh-Hans", "Regular")]
+
+
+# Drawn in place of single characters the chosen font has no glyph for. The bundled
+# pixel font lacks about one common Chinese character in twenty.
+SUBSTITUTE_FACES = [FALLBACK_FACES[0], FALLBACK_FACES[1], FONTS["pingfang"][1]]
 
 
 def available_fonts() -> list[dict]:
@@ -299,7 +307,8 @@ def _face_index(path: str, family: str, style: str) -> int:
 def _load(family: str, size: int, bold: bool) -> ImageFont.FreeTypeFont:
     if family in PIXEL_FONTS:
         unit = PIXEL_FONTS[family]
-        size = max(1, round(size / unit)) * unit
+        sharp = max(1, round(size / unit)) * unit
+        size = sharp if sharp >= size * PIXEL_SNAP else size
     chosen = FONTS.get(family, FONTS["hiragino"])[2 if bold else 1]
     for path, name, style in (chosen, *FALLBACK_FACES):
         if path and os.path.exists(path):
@@ -310,6 +319,11 @@ def _load(family: str, size: int, bold: bool) -> ImageFont.FreeTypeFont:
     raise RuntimeError("no usable Chinese font found; see FONTS in render.py")
 
 
+@lru_cache(maxsize=32)
+def _sized(path: str, index: int, size: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(path, size, index=index)
+
+
 _family = "hiragino"  # set per frame by _render, which holds the render lock
 
 
@@ -317,10 +331,63 @@ def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     return _load(_family, size, bold)
 
 
+@lru_cache(maxsize=16)
+def _probe(path: str, index: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(path, 12, index=index)
+
+
+@lru_cache(maxsize=8192)
+def _covers(path: str, index: int, char: str) -> bool:
+    """Whether a face has its own drawing for a character. Pillow does not say, so
+    compare with what the face draws for a code point that no font assigns."""
+    def drawn(text: str) -> tuple:
+        mask = _probe(path, index).getmask(text, mode="1")
+        return mask.size, bytes(mask)
+    return char.isspace() or drawn(char) != drawn("\U0010ffff")
+
+
+def _runs(text: str, font: ImageFont.FreeTypeFont) -> list[tuple[str, ImageFont.FreeTypeFont]]:
+    """Split text by the face that draws it: the chosen one where it has the character,
+    otherwise the first substitute that does, so a gap in a font is not a blank box."""
+    runs: list[tuple[str, ImageFont.FreeTypeFont]] = []
+    for char in text:
+        face = font
+        if not _covers(font.path, font.index, char):
+            for path, name, style in SUBSTITUTE_FACES:
+                if path and os.path.exists(path) and _covers(path, _face_index(path, name, style), char):
+                    face = _sized(path, _face_index(path, name, style), font.size)
+                    break
+        if runs and runs[-1][1] is face:
+            runs[-1] = (runs[-1][0] + char, face)
+        else:
+            runs.append((char, face))
+    return runs
+
+
+def _length(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont) -> float:
+    return sum(draw.textlength(part, font=face) for part, face in _runs(text, font))
+
+
+def _text(draw: ImageDraw.ImageDraw, xy, text: str, font: ImageFont.FreeTypeFont, fill, anchor: str) -> None:
+    """`draw.text` for one line, with characters the font lacks drawn from a substitute."""
+    runs = _runs(text, font)
+    if all(face is font for _, face in runs):
+        draw.text(xy, text, font=font, fill=fill, anchor=anchor)
+        return
+    x, y = xy
+    x -= {"l": 0, "m": 0.5, "r": 1}[anchor[0]] * _length(draw, text, font)
+    if anchor[1] == "m":  # every run sits on the chosen font's baseline
+        ascent, descent = font.getmetrics()
+        y += (ascent - descent) / 2
+    for part, face in runs:
+        draw.text((x, y), part, font=face, fill=fill, anchor="ls")
+        x += draw.textlength(part, font=face)
+
+
 def _fit(draw: ImageDraw.ImageDraw, text: str, font, max_width: float) -> str:
-    if draw.textlength(text, font=font) <= max_width:
+    if _length(draw, text, font) <= max_width:
         return text
-    while text and draw.textlength(text + "…", font=font) > max_width:
+    while text and _length(draw, text + "…", font) > max_width:
         text = text[:-1]
     return text + "…"
 
@@ -341,7 +408,7 @@ def _mark(draw: ImageDraw.ImageDraw, x: int, y: int, agent: str, ink: int) -> No
     if icon:
         draw.bitmap((x, y), icon, fill=ink)
     else:
-        draw.text((x + ICON_SIZE / 2, y + ICON_SIZE / 2), agent[:1], font=_font(SMALL, True), fill=ink, anchor="mm")
+        _text(draw, (x + ICON_SIZE / 2, y + ICON_SIZE / 2), agent[:1], font=_font(SMALL, True), fill=ink, anchor="mm")
 
 
 def _tag(draw: ImageDraw.ImageDraw, x: int, y: int, agent: str, ink: int, paper: int, solid: bool = False) -> int:
@@ -355,9 +422,9 @@ def _tag(draw: ImageDraw.ImageDraw, x: int, y: int, agent: str, ink: int, paper:
 
 
 def _header(draw: ImageDraw.ImageDraw, right: str, ink: int) -> None:
-    draw.text((MARGIN, BAR_Y), "AGENTS", font=_font(SMALL, True), fill=ink, anchor="lm")
+    _text(draw, (MARGIN, BAR_Y), "AGENTS", font=_font(SMALL, True), fill=ink, anchor="lm")
     if right:
-        draw.text((W - MARGIN, BAR_Y), right, font=_font(SMALL), fill=ink, anchor="rm")
+        _text(draw, (W - MARGIN, BAR_Y), right, font=_font(SMALL), fill=ink, anchor="rm")
 
 
 def _quota_header(draw: ImageDraw.ImageDraw, quota: list[dict], ink: int) -> None:
@@ -375,14 +442,14 @@ def _quota_header(draw: ImageDraw.ImageDraw, quota: list[dict], ink: int) -> Non
         return out
 
     def width(parts: list[str]) -> float:
-        return sum(ICON_SIZE + 4 + draw.textlength(text, font=font) for text in parts) + GAP
+        return sum(ICON_SIZE + 4 + _length(draw, text, font) for text in parts) + GAP
 
     parts = next((t for t in map(texts, (2, 1, 0)) if width(t) <= W - 2 * MARGIN), texts(0))
     top = BAR_Y - ICON_SIZE // 2
     _mark(draw, MARGIN, top, quota[0]["agent"], ink)
-    draw.text((MARGIN + ICON_SIZE + 4, BAR_Y), parts[0], font=font, fill=ink, anchor="lm")
-    right_x = W - MARGIN - draw.textlength(parts[1], font=font)
-    draw.text((right_x, BAR_Y), parts[1], font=font, fill=ink, anchor="lm")
+    _text(draw, (MARGIN + ICON_SIZE + 4, BAR_Y), parts[0], font=font, fill=ink, anchor="lm")
+    right_x = W - MARGIN - _length(draw, parts[1], font)
+    _text(draw, (right_x, BAR_Y), parts[1], font=font, fill=ink, anchor="lm")
     _mark(draw, round(right_x) - 4 - ICON_SIZE, top, quota[1]["agent"], ink)
 
 
@@ -393,17 +460,17 @@ def _quota_panel(draw: ImageDraw.ImageDraw, quota: list[dict], ink: int) -> None
     for entry in quota:
         _mark(draw, MARGIN, y - ICON_SIZE // 2, entry["agent"], ink)
         if not entry["rows"]:
-            draw.text((label_x, y), "暂无数据", font=_font(SMALL), fill=ink, anchor="lm")
+            _text(draw, (label_x, y), "暂无数据", font=_font(SMALL), fill=ink, anchor="lm")
             y += 22
         for row in entry["rows"]:
-            draw.text((label_x, y), row["window"], font=_font(SMALL), fill=ink, anchor="lm")
+            _text(draw, (label_x, y), row["window"], font=_font(SMALL), fill=ink, anchor="lm")
             draw.rectangle([(bar_x, y - 5), (bar_x + bar_w, y + 5)], outline=ink)
             filled = round((bar_w - 4) * row["left"] / 100)
             if filled:
                 draw.rectangle([(bar_x + 2, y - 3), (bar_x + 2 + filled, y + 3)], fill=ink)
-            draw.text((bar_x + bar_w + GAP, y), f"{row['left']}%", font=_font(SMALL, True), fill=ink, anchor="lm")
+            _text(draw, (bar_x + bar_w + GAP, y), f"{row['left']}%", font=_font(SMALL, True), fill=ink, anchor="lm")
             if row["reset"]:
-                draw.text((W - MARGIN, y), f"{row['reset']} 重置", font=_font(SMALL), fill=ink, anchor="rm")
+                _text(draw, (W - MARGIN, y), f"{row['reset']} 重置", font=_font(SMALL), fill=ink, anchor="rm")
             y += 22
 
 
@@ -423,13 +490,13 @@ def _render(view: dict) -> Image.Image:
 
     if kind == "wait":
         _header(draw, view["since"], ink)
-        draw.text((MARGIN, 52), view["title"], font=_font(TITLE, True), fill=ink, anchor="lm")
+        _text(draw, (MARGIN, 52), view["title"], font=_font(TITLE, True), fill=ink, anchor="lm")
         name_x = _tag(draw, MARGIN, 98, view["agent"], ink, paper, solid=True) + GAP
         name_font = _font(WAIT_NAME, True)
-        draw.text((name_x, 98), _fit(draw, view["task"], name_font, W - MARGIN - name_x),
+        _text(draw, (name_x, 98), _fit(draw, view["task"], name_font, W - MARGIN - name_x),
                   font=name_font, fill=ink, anchor="lm")
         footer = " · ".join(part for part in (view["detail"], view["footer"]) if part)
-        draw.text((MARGIN, 136), _fit(draw, footer, _font(SMALL), W - 2 * MARGIN),
+        _text(draw, (MARGIN, 136), _fit(draw, footer, _font(SMALL), W - 2 * MARGIN),
                   font=_font(SMALL), fill=ink, anchor="lm")
         return img
 
@@ -437,8 +504,8 @@ def _render(view: dict) -> Image.Image:
         draw.rectangle([(0, 0), (W - 1, H - 1)], outline=ink)
         for x, y in ((4, 4), (W - 16, 4), (4, H - 16), (W - 16, H - 16)):
             draw.rectangle([(x, y), (x + 11, y + 11)], fill=ink)
-        draw.text((W // 2, 66), "测试画面", font=_font(28, True), fill=ink, anchor="mm")
-        draw.text((W // 2, 100), view["note"], font=_font(13), fill=ink, anchor="mm")
+        _text(draw, (W // 2, 66), "测试画面", font=_font(28, True), fill=ink, anchor="mm")
+        _text(draw, (W // 2, 100), view["note"], font=_font(13), fill=ink, anchor="mm")
         return img
 
     quota = view.get("quota")
@@ -451,14 +518,14 @@ def _render(view: dict) -> Image.Image:
     if kind == "idle" and quota:
         _quota_panel(draw, quota, ink)
         if view["last"]:
-            draw.text((MARGIN, 139), _fit(draw, view["last"], _font(SMALL), W - 2 * MARGIN),
+            _text(draw, (MARGIN, 139), _fit(draw, view["last"], _font(SMALL), W - 2 * MARGIN),
                       font=_font(SMALL), fill=ink, anchor="lm")
         return img
 
     if kind in ("idle", "quiet"):
-        draw.text((W // 2, 78), view["line"], font=_font(18, True), fill=ink, anchor="mm")
+        _text(draw, (W // 2, 78), view["line"], font=_font(18, True), fill=ink, anchor="mm")
         if view["last"]:
-            draw.text((W // 2, 108), _fit(draw, view["last"], _font(12), W - 24),
+            _text(draw, (W // 2, 108), _fit(draw, view["last"], _font(12), W - 24),
                       font=_font(12), fill=ink, anchor="mm")
         return img
 
@@ -466,16 +533,16 @@ def _render(view: dict) -> Image.Image:
     # the agent's tag, the conversation's name, and how long it has run on the right.
     small, name_font = _font(SMALL), _font(NAME, True)
     name_x = MARGIN + TAG_SIZE + GAP
-    when_width = max(draw.textlength(text, font=small) for text in ("<5m", "59m", "等你", "出错"))
+    when_width = max(_length(draw, text, small) for text in ("<5m", "59m", "等你", "出错"))
     name_width = W - MARGIN - when_width - GAP - name_x
     y = ROW_Y
     for row in view["rows"]:
         _tag(draw, MARGIN, y, row["agent"], ink, paper, solid=row["state"] in (RUNNING, WAITING))
-        draw.text((name_x, y), _fit(draw, row["title"], name_font, name_width), font=name_font, fill=ink, anchor="lm")
-        draw.text((W - MARGIN, y), row["when"], font=small, fill=ink, anchor="rm")
+        _text(draw, (name_x, y), _fit(draw, row["title"], name_font, name_width), font=name_font, fill=ink, anchor="lm")
+        _text(draw, (W - MARGIN, y), row["when"], font=small, fill=ink, anchor="rm")
         y += ROW_PITCH
     if view["more"]:
-        draw.text((name_x, y), f"还有 {view['more']} 个", font=small, fill=ink, anchor="lm")
+        _text(draw, (name_x, y), f"还有 {view['more']} 个", font=small, fill=ink, anchor="lm")
     return img
 
 

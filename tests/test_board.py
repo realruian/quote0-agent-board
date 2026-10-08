@@ -199,6 +199,24 @@ class RenderTest(unittest.TestCase):
         cut = _fit(draw, "一个特别特别特别长的对话名称放不下", font, 160)
         self.assertTrue(cut.endswith("…") and draw.textlength(cut, font=font) <= 160)
 
+    def test_pixel_font_is_never_much_smaller_than_the_other_fonts(self):
+        from agent_board.render import _load
+        sizes = {asked: _load("arkpixel", asked, True).size for asked in (12, 16, 20, 36)}
+        self.assertEqual(sizes, {12: 12, 16: 16, 20: 24, 36: 36})  # a sharp multiple when one is near
+
+    def test_characters_a_font_lacks_come_from_a_substitute(self):
+        from agent_board.render import _fit, _length, _load, _runs
+        from PIL import Image, ImageDraw
+        font = _load("arkpixel", 16, True)
+        self.assertEqual(_runs("更新接口文档", font), [("更新接口文档", font)])
+        parts = _runs("鉴权说明", font)  # the pixel font has no 鉴
+        self.assertEqual([text for text, _ in parts], ["鉴", "权说明"])
+        self.assertIsNot(parts[0][1], font)
+        self.assertEqual(parts[0][1].size, font.size)
+        draw = ImageDraw.Draw(Image.new("1", (W, H)))
+        self.assertLessEqual(_length(draw, _fit(draw, "鉴权说明" * 8, font, 160), font), 160)
+        self.assertEqual(render(build_view(sample_board("list"), 5, {"font": "arkpixel"})).size, (W, H))
+
     def test_samples_and_special_frames_render(self):
         for kind in ("list", "wait", "idle"):
             self.assertEqual(build_view(sample_board(kind))["kind"], kind)
