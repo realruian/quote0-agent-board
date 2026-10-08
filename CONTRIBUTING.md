@@ -56,6 +56,9 @@ python3 install.py
 | `agent_board/web.py`、`agent_board/web/` | 本地设置页 |
 | `menubar/main.swift` | 菜单栏 App，安装时在本机编译 |
 | `install.py` | 安装和卸载 |
+| `app/Sources/BoardCore/` | Swift 版的全部逻辑，和上面的 Python 模块一一对应，不依赖界面，可以测试 |
+| `app/Sources/AgentBoard/` | Swift 版的菜单栏界面，以及首次启动时的安装和卸载 |
+| `scripts/build_app.py` | 把 Swift 版打包成 App 和 DMG |
 
 ## 提交改动
 

@@ -14,3 +14,7 @@ venv/
 # The pictures in docs/images/ are rendered from made-up data instead.
 /preview.png
 /current-screen.png
+
+# Build output
+/dist/
+/app/.build/

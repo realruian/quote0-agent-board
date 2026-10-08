@@ -86,6 +86,23 @@ flowchart TB
 - **后台进程**（`agent_board/daemon.py`）：维护每个对话的状态，决定什么时候刷屏，用 Pillow 在本机把画面渲染成黑白图。
 - **推送**：通过 MindReset 官方的[图像 API](https://dot.mindreset.tech/docs/service/open/image_api) 发到设备。
 
+## Swift 版 App（这个分支上的试验）
+
+这个分支把后台进程用 Swift 重写了一遍，和菜单栏图标合成了一个 App，不再需要 Python。设置页原样沿用，配置文件和钩子与 Python 版通用，两个版本可以来回切换。
+
+```bash
+python3 scripts/build_app.py
+```
+
+会生成 `dist/Agent 状态牌.app` 和 `dist/Agent-Board-<版本>.dmg`（约 2.4 MB，同时支持 Apple 芯片和 Intel）。把 App 拖进「应用程序」打开即可：它会接管 Python 版的后台进程，第一次打开时连接 Claude Code 和 Codex，并在浏览器里打开「连接设备」。
+
+- **没有签名**：从网上下载的 DMG 第一次打开会被 macOS 拦一下，要到「系统设置 → 隐私与安全性」里点「仍要打开」。DMG 里的「先看这里.txt」写了步骤。
+- **卸载**：点菜单栏图标，选「卸载…」。
+- **切回 Python 版**：先在菜单栏里退出 App，再运行 `python3 install.py`。
+- **开发**：代码在 `app/`，`swift test --package-path app` 运行测试。
+
+下面的说明仍然是 Python 版的。
+
 ## 环境要求
 
 - macOS。后台进程由 launchd 管理，字体用的是系统自带的中文字体。

@@ -89,6 +89,23 @@ flowchart TB
 - **Daemon** (`agent_board/daemon.py`): keeps the state of every conversation, decides when to refresh, and renders the frame locally with Pillow.
 - **Push**: frames reach the device through MindReset's official [Image API](https://dot.mindreset.tech/docs/service/open/image_api).
 
+## The Swift app (an experiment on this branch)
+
+This branch rewrites the daemon in Swift and merges it with the menu bar icon into one app, so Python is no longer needed. The settings page is reused as it is, and the configuration file and hooks are shared with the Python version, so you can switch between the two.
+
+```bash
+python3 scripts/build_app.py
+```
+
+This leaves `dist/Agent 状态牌.app` and `dist/Agent-Board-<version>.dmg` (about 2.4 MB, for both Apple silicon and Intel). Drag the app into Applications and open it: it takes over from the Python daemon, connects Claude Code and Codex on first launch, and opens the "connect a device" page in your browser.
+
+- **Not signed**: macOS blocks a downloaded copy the first time. Allow it under System Settings → Privacy & Security → Open Anyway. The note inside the disk image has the steps.
+- **Uninstall**: choose 卸载… from the menu bar icon.
+- **Back to the Python version**: quit the app from the menu bar, then run `python3 install.py`.
+- **Development**: the code is in `app/`; `swift test --package-path app` runs the tests.
+
+The rest of this page still describes the Python version.
+
 ## Requirements
 
 - macOS. The daemon is managed by launchd, and text is drawn with the system's Chinese fonts.
