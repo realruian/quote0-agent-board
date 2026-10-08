@@ -138,6 +138,10 @@ final class ViewTests: BoardTestCase {
         let b = Board()
         for i in 0..<6 { b.apply("claude", "UserPromptSubmit", ["session_id": .string("\(i)"), "cwd": .string("/p/\(i)")], now: Double(i)) }
         XCTAssertEqual(buildView(b, now: 10).rows.map(\.title), ["5", "4", "3", "2"])  // every line goes to a conversation
+        let listed = buildView(b, now: 10).named
+        XCTAssertEqual(b.visible(10).filter { !listed.contains($0.key) }.map(\.project), ["1", "0"])  // the menu lists the rest
+        b.apply("claude", "PermissionRequest", ["session_id": "3", "cwd": "/p/3", "tool_name": "Bash"], now: 11)
+        XCTAssertEqual(buildView(b, now: 12).named, b.visible(12).filter { $0.state == .waiting }.map(\.key))  // taken over: only the one waiting
     }
 
     // -- quota on the frame --

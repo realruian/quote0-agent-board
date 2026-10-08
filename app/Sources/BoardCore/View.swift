@@ -73,6 +73,8 @@ public struct FrameView: Equatable {
     public var last = ""
     // test
     public var note = ""
+    /// The conversations the frame names, by key: the one waiting, or the rows of the list.
+    public var named: [String] = []
 
     public init(kind: Kind, font: String) {
         self.kind = kind
@@ -180,6 +182,7 @@ public func buildView(_ board: Board, now: Double = Date().timeIntervalSince1970
         view.detail = settings.showDetail && first.waitKind == "permission" ? first.detail : ""
         view.since = "\(hhmm(first.waitingSince)) 开始等"
         view.footer = others.isEmpty ? "其他 Agent 空闲" : others.joined(separator: " · ")
+        view.named = [first.key]
         return view
     }
 
@@ -190,7 +193,9 @@ public func buildView(_ board: Board, now: Double = Date().timeIntervalSince1970
         view.summary = shown.allSatisfy { $0.state == .done } ? "全部完成"
             : counts.filter { $0.0 > 0 }.map { "\($0.0) \($0.1)" }.joined(separator: " · ")
         // most urgent first; the rest wait for a free line
-        view.rows = shown.prefix(min(settings.maxRows, maxRows)).map { s in
+        let listed = shown.prefix(min(settings.maxRows, maxRows))
+        view.named = listed.map(\.key)
+        view.rows = listed.map { s in
             // The agent's tag carries the state (solid while working, outlined once finished).
             // The right-hand column is how long the task has run, or took; or a word when it needs a look.
             var row = ViewRow(state: s.state, agent: agentLabel[s.source] ?? s.source, title: headline(s), when: "")

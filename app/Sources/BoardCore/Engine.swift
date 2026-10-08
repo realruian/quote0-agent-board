@@ -25,17 +25,20 @@ public final class Engine {
         var board: Board.Saved?
         var lastSig: String?
         var lastPush: LastPush?
+        var framed: [String]?
 
         enum CodingKeys: String, CodingKey {
             case board
             case lastSig = "last_sig"
             case lastPush = "last_push"
+            case framed
         }
 
-        init(board: Board.Saved, lastSig: String, lastPush: LastPush?) {
+        init(board: Board.Saved, lastSig: String, lastPush: LastPush?, framed: [String]) {
             self.board = board
             self.lastSig = lastSig
             self.lastPush = lastPush
+            self.framed = framed
         }
 
         init(from decoder: Decoder) throws {
@@ -44,6 +47,7 @@ public final class Engine {
             board = try? container.decode(Board.Saved.self, forKey: .board)
             lastSig = try? container.decode(String.self, forKey: .lastSig)
             lastPush = try? container.decode(LastPush.self, forKey: .lastPush)
+            framed = try? container.decode([String].self, forKey: .framed)
         }
     }
 
@@ -62,6 +66,8 @@ public final class Engine {
     var lastSig = ""
     var lastPushAt = 0.0
     public private(set) var lastPush: LastPush?
+    /// The conversations named on the frame last sent, by key.
+    public private(set) var framed: [String] = []
     var testUntil = 0.0
     var farewellUntil = 0.0
     public private(set) var usage: Usage?
@@ -106,10 +112,11 @@ public final class Engine {
         if let saved = state.board { board.load(saved) }
         lastSig = state.lastSig ?? ""
         lastPush = state.lastPush
+        framed = state.framed ?? []
     }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(StateFile(board: board.saved, lastSig: lastSig, lastPush: lastPush)) else { return }
+        guard let data = try? JSONEncoder().encode(StateFile(board: board.saved, lastSig: lastSig, lastPush: lastPush, framed: framed)) else { return }
         try? ConfigStore.write(data, to: Paths.state)
     }
 
@@ -255,7 +262,10 @@ public final class Engine {
     private func push(_ view: FrameView) throws -> String {
         let png = render(view).png
         try? ConfigStore.write(png, to: Paths.frame)
-        let settings = locked { self.settings }
+        let settings: Settings = locked {
+            framed = view.named
+            return self.settings
+        }
         if dryRun {
             Log.info("dry run: rendered \(view.kind.rawValue) frame, not sent")
             return "空跑模式，没有发送"

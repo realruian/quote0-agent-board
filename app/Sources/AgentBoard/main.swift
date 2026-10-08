@@ -3,8 +3,8 @@
 // The app is in the Dock and has one window, which holds the settings (see UI/). The
 // board itself works in the background, so there is also an icon in the menu bar,
 // which can be turned off: it says whether the board is healthy and how many
-// conversations are waiting, and its menu shows the frame on the screen and each
-// conversation's state. Closing the window leaves the board running; quitting the
+// conversations are waiting, and its menu shows the frame on the screen and the
+// conversations the frame has no room for. Closing the window leaves the board running; quitting the
 // app turns it off. The Dock icon can be set to go when the window closes, which
 // leaves the app in the menu bar alone: one of the two icons is always there.
 
@@ -199,6 +199,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var sessions: [Session] = []
         var aliases: [String: String] = [:]
         var lastPush: Engine.LastPush?
+        var onFrame: Set<String> = []  // the conversations named on the frame last sent
         var quiet = false
         var paused = false
         var needsSetup = false
@@ -210,22 +211,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let settings = engine.settings
             let hidden = Set(settings.hiddenProjects)  // hidden projects are kept off the screen, and off here
             return Snapshot(sessions: engine.board.visible().filter { !hidden.contains($0.project) }, aliases: settings.aliases,
-                            lastPush: engine.lastPush, quiet: engine.currentView().kind == .quiet, paused: settings.paused,
+                            lastPush: engine.lastPush, onFrame: Set(engine.framed), quiet: engine.currentView().kind == .quiet, paused: settings.paused,
                             needsSetup: !engine.dryRun && !settings.ready, dryRun: engine.dryRun)
         }
     }
 
     /// The one line that says how the board is doing, the worst thing first, with the
-    /// symbol that goes beside it in the menu and the badge that goes on the icon.
-    private func status(_ now: Snapshot) -> (symbol: String, badge: String?, line: String) {
-        if now.needsSetup { return ("ellipsis.rectangle", "ellipsis", "还没有连接设备") }
-        if now.paused { return ("pause.rectangle", "pause.fill", "已暂停，屏幕不再更新") }
-        if now.dryRun { return (boardSymbol, nil, "空跑模式，画面不会发到屏幕上") }
-        guard let push = now.lastPush else { return (boardSymbol, nil, "还没有刷新过屏幕") }
-        if !push.ok { return ("exclamationmark.triangle", "exclamationmark", "最近一次刷新失败：\(push.message)") }
-        if push.delivered == false { return ("moon.zzz", "moon.fill", "设备休眠或离线，最新画面还没显示") }
-        if now.quiet { return (boardSymbol, nil, "夜间免打扰中，屏幕暂不刷新") }
-        return (boardSymbol, nil, "屏幕已是最新 · \(ago(push.at))刷新")
+    /// symbol that goes beside it in the menu and the badge that goes on the icon. `well`
+    /// is the one case where there is nothing to say.
+    private func status(_ now: Snapshot) -> (symbol: String, badge: String?, line: String, well: Bool) {
+        if now.needsSetup { return ("ellipsis.rectangle", "ellipsis", "还没有连接设备", false) }
+        if now.paused { return ("pause.rectangle", "pause.fill", "已暂停，屏幕不再更新", false) }
+        if now.dryRun { return (boardSymbol, nil, "空跑模式，画面不会发到屏幕上", false) }
+        guard let push = now.lastPush else { return (boardSymbol, nil, "还没有刷新过屏幕", false) }
+        if !push.ok { return ("exclamationmark.triangle", "exclamationmark", "最近一次刷新失败：\(push.message)", false) }
+        if push.delivered == false { return ("moon.zzz", "moon.fill", "设备休眠或离线，最新画面还没显示", false) }
+        if now.quiet { return (boardSymbol, nil, "夜间免打扰中，屏幕暂不刷新", false) }
+        return (boardSymbol, nil, "屏幕已是最新 · \(ago(push.at))刷新", true)
     }
 
     /// The board's own mark, the same in every state so it can be found, with a small badge
@@ -259,7 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func draw() {
         guard let button = statusItem.button else { return }
         let now = snapshot()
-        let (_, badge, line) = status(now)
+        let (_, badge, line, _) = status(now)
         let waiting = now.sessions.filter { $0.state == .waiting }.count
         button.image = statusIcon(badge: badge)
         button.imagePosition = .imageLeading
@@ -275,28 +277,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let now = snapshot()
-        let (symbol, _, line) = status(now)
-        if !now.needsSetup, let frame = NSImage(data: engine.framePNG()) { menu.addItem(frameItem(frame)) }
-        add(line, symbol: symbol)
+        let (symbol, _, line, well) = status(now)
+        let frame = now.needsSetup ? nil : NSImage(data: engine.framePNG())
+        if let frame = frame { menu.addItem(frameItem(frame)) }
+        // Said only when something is off: the icon without a badge already says all is well.
+        if !well { add(line, symbol: symbol) }
+
+        // The frame names its conversations; the rows are the ones it has no room for.
+        let rest = now.sessions.filter { frame == nil || !now.onFrame.contains($0.key) }
+        for session in rest.prefix(maxMenuRows) { add(rowTitle(session, now.aliases), symbol: rowSymbol(session)) }
+        if rest.count > maxMenuRows { add("还有 \(rest.count - maxMenuRows) 个") }
         menu.addItem(.separator())
 
-        if now.sessions.isEmpty { add("现在没有对话") }
-        for session in now.sessions.prefix(maxMenuRows) {
-            add(rowTitle(session, now.aliases), #selector(openSettings), symbol: rowSymbol(session))
-        }
-        if now.sessions.count > maxMenuRows { add("还有 \(now.sessions.count - maxMenuRows) 个") }
-        menu.addItem(.separator())
-
-        add(now.needsSetup ? "连接设备…" : "打开设置…", #selector(openSettings))
+        add(now.needsSetup ? "连接设备…" : "打开设置…", #selector(showSettings))
         if !now.needsSetup {
             add("刷新屏幕", #selector(refreshScreen))
             add(now.paused ? "恢复" : "暂停", #selector(togglePause))
         }
         menu.addItem(.separator())
-        add("隐藏菜单栏图标", #selector(toggleMenuBarIcon))
-        add("关闭窗口后保留程序坞图标", #selector(toggleDockIcon))
-        menu.items.last?.state = UserDefaults.standard.bool(forKey: AppDelegate.leavesDock) ? .off : .on
-        if !Paths.isDevelopment { add("卸载…", #selector(uninstall)) }
         add("退出", #selector(quit), key: "q")
     }
 
@@ -375,6 +373,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let needsSetup = engine.locked { !engine.dryRun && !engine.settings.ready }
         if NSApp.activationPolicy() != .regular { NSApp.setActivationPolicy(.regular) }  // a window on screen has its app in the Dock
         window.show(needsSetup ? .setup : nil)
+    }
+
+    /// The same, for the menu bar icon's menu. macOS draws a gear beside an action called
+    /// `openSettings`, and the rows around it there have no symbol to line up with.
+    @objc private func showSettings() {
+        openSettings()
     }
 
     /// Put the app in the Dock or take it out, as the setting and the window have it.
