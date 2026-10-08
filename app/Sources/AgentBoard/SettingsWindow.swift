@@ -1,33 +1,41 @@
-// The app's window: the settings pages the board serves on 127.0.0.1, shown in a
-// window of the app's own instead of the browser.
+// The app's window. SwiftUI draws what is in it; this decides when it is on screen.
 
 import AppKit
-import WebKit
+import Combine
+import SwiftUI
 
-final class SettingsWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
-    private let address: () -> String?  // the console's address, once it is listening
+/// A window for taking a picture of in development. macOS pulls an ordinary window
+/// back onto a screen when it is placed off all of them; this one stays where it is put.
+private final class UnseenWindow: NSWindow {
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+}
+
+final class SettingsWindow {
+    private let model: BoardModel
     private var window: NSWindow?
-    private var web: WKWebView?
-    /// In development, set to a file to save a picture of the page to; the app then quits.
+    private var pageChanges: AnyCancellable?
+    /// In development, a file to save a picture of the window to; the app then quits.
     private let snapshot = ProcessInfo.processInfo.environment["AGENT_BOARD_SNAPSHOT"]
 
-    init(address: @escaping () -> String?) {
-        self.address = address
+    init(model: BoardModel) {
+        self.model = model
     }
 
-    /// Bring the window forward, on the page named the way the pages' own links name it.
-    func show(_ page: String = "") {
-        guard let address = address(), let url = URL(string: "\(address)/#\(page)") else { return }
+    /// Bring the window forward, on `page` when one is asked for.
+    func show(_ page: Page? = nil) {
+        if let page = page { model.page = page }
+        model.refresh()
         if window == nil { build() }
-        guard let window = window, let web = web else { return }
-        if web.url?.port != url.port {
-            web.load(URLRequest(url: url))
-        } else if !page.isEmpty {
-            web.evaluateJavaScript("location.hash = \"\(page)\"")
-        }
-        if snapshot != nil {
-            window.setFrameOrigin(NSPoint(x: -20000, y: -20000))  // drawn, but not put in front of anyone
-            window.orderFront(nil)
+        guard let window = window else { return }
+        if let path = snapshot {
+            // Laid out and drawn into a picture, but never seen: invisible, far off every screen, and deaf to the mouse and keyboard.
+            window.alphaValue = 0
+            window.ignoresMouseEvents = true
+            window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+            window.orderBack(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self.save(window, to: path) }
             return
         }
         window.makeKeyAndOrderFront(nil)
@@ -35,62 +43,30 @@ final class SettingsWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     private func build() {
-        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1040, height: 720), configuration: WKWebViewConfiguration())
-        web.navigationDelegate = self
-        web.uiDelegate = self
-        let window = NSWindow(contentRect: web.frame, styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        let host = NSHostingController(rootView: RootView(model: model))
+        host.sceneBridgingOptions = [.toolbars, .title]  // the sidebar and the page title go into the window's own bar
+        let window = snapshot == nil ? NSWindow(contentViewController: host) : UnseenWindow(contentViewController: host)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.toolbarStyle = .unified
         window.title = "Agent 状态牌"
-        window.contentView = web
         window.isReleasedWhenClosed = false  // closing it leaves the board running; it opens again from the Dock
-        window.minSize = NSSize(width: 760, height: 520)
+        window.setContentSize(NSSize(width: 920, height: 660))
         window.center()
-        window.setFrameAutosaveName("settings")
-        self.web = web
+        window.setFrameAutosaveName("main")
         self.window = window
-    }
-
-    // Links that lead off the board, such as MindReset's documentation, belong in the browser.
-    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let url = navigationAction.request.url, url.host != "127.0.0.1" || navigationAction.targetFrame == nil else {
-            return decisionHandler(.allow)
+        // A page that comes up should not hand the keyboard to its first field: the window
+        // scrolls to wherever the cursor is, and nobody asked to type yet.
+        pageChanges = model.$page.sink { [weak window] _ in
+            DispatchQueue.main.async { window?.makeFirstResponder(nil) }
         }
-        NSWorkspace.shared.open(url)
-        decisionHandler(.cancel)
     }
 
-    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction,
-                 windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = navigationAction.request.url { NSWorkspace.shared.open(url) }
-        return nil
-    }
-
-    // The pages ask before restarting the board.
-    func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping (Bool) -> Void) {
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.addButton(withTitle: "好")
-        alert.addButton(withTitle: "取消")
-        completionHandler(alert.runModal() == .alertFirstButtonReturn)
-    }
-
-    func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping () -> Void) {
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.runModal()
-        completionHandler()
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        guard let path = snapshot else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {  // the page fills itself in after it loads
-            webView.takeSnapshot(with: nil) { image, _ in
-                if let tiff = image?.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
-                    try? png.write(to: URL(fileURLWithPath: path))
-                }
-                exit(0)
-            }
+    private func save(_ window: NSWindow, to path: String) {
+        guard let view = window.contentView?.superview ?? window.contentView, let picture = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+            exit(1)
         }
+        view.cacheDisplay(in: view.bounds, to: picture)
+        try? picture.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        exit(0)
     }
 }

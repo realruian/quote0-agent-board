@@ -91,13 +91,13 @@ flowchart TB
 
 ## The Swift app (an experiment on this branch)
 
-This branch rewrites the daemon in Swift as an ordinary Mac app: it has a Dock icon, its settings are in a window of its own, a small icon in the menu bar shows the state, and Python is no longer needed. The settings pages themselves are reused as they are, and the configuration file and hooks are shared with the Python version, so you can switch between the two.
+This branch rewrites the daemon in Swift as an ordinary Mac app: it has a Dock icon, its settings are in a window of its own, a small icon in the menu bar shows the state, and Python is no longer needed. The window is native, written in SwiftUI, and takes the system's Liquid Glass look on macOS 26 and later; it needs macOS 14 or newer. The configuration file and hooks are shared with the Python version, so you can switch between the two.
 
 ```bash
 python3 scripts/build_app.py
 ```
 
-This leaves `dist/Agent 状态牌.app` and `dist/Agent-Board-<version>.dmg` (about 2.4 MB, for both Apple silicon and Intel). Drag the app into Applications and open it: it takes over from the Python daemon, connects Claude Code and Codex on first launch, and opens the "connect a device" page in your browser.
+This leaves `dist/Agent 状态牌.app` and `dist/Agent-Board-<version>.dmg` (about 3 MB, for both Apple silicon and Intel). Drag the app into Applications and open it: it takes over from the Python daemon, connects Claude Code and Codex on first launch, and opens its "connect a device" page.
 
 - **Not signed**: macOS blocks a downloaded copy the first time. Allow it under System Settings → Privacy & Security → Open Anyway. The note inside the disk image has the steps.
 - **The menu bar icon is optional**: untick 在菜单栏显示图标 in the app's menu at the top of the screen. The number of conversations waiting for you is also shown on the Dock icon, and a right click on it offers pause and refresh.

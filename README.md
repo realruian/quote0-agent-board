@@ -88,13 +88,13 @@ flowchart TB
 
 ## Swift 版 App（这个分支上的试验）
 
-这个分支把后台进程用 Swift 重写了一遍，做成了一个普通的 Mac App：程序坞里有图标，设置在它自己的窗口里，菜单栏上有一个显示状态的小图标，不再需要 Python。设置页的内容原样沿用，配置文件和钩子与 Python 版通用，两个版本可以来回切换。
+这个分支把后台进程用 Swift 重写了一遍，做成了一个普通的 Mac App：程序坞里有图标，设置在它自己的窗口里，菜单栏上有一个显示状态的小图标，不再需要 Python。窗口是用 SwiftUI 写的原生界面，在 macOS 26 及以上带系统的 Liquid Glass 效果；需要 macOS 14 或更新版本。配置文件和钩子与 Python 版通用，两个版本可以来回切换。
 
 ```bash
 python3 scripts/build_app.py
 ```
 
-会生成 `dist/Agent 状态牌.app` 和 `dist/Agent-Board-<版本>.dmg`（约 2.4 MB，同时支持 Apple 芯片和 Intel）。把 App 拖进「应用程序」打开即可：它会接管 Python 版的后台进程，第一次打开时连接 Claude Code 和 Codex，并在浏览器里打开「连接设备」。
+会生成 `dist/Agent 状态牌.app` 和 `dist/Agent-Board-<版本>.dmg`（约 3 MB，同时支持 Apple 芯片和 Intel）。把 App 拖进「应用程序」打开即可：它会接管 Python 版的后台进程，第一次打开时连接 Claude Code 和 Codex，并打开「连接设备」页面。
 
 - **没有签名**：从网上下载的 DMG 第一次打开会被 macOS 拦一下，要到「系统设置 → 隐私与安全性」里点「仍要打开」。DMG 里的「先看这里.txt」写了步骤。
 - **菜单栏图标可以关掉**：在屏幕顶部的「Agent 状态牌」菜单里取消「在菜单栏显示图标」。等你处理的对话数量同时显示在程序坞图标上，暂停和刷新在程序坞图标的右键菜单里也有。

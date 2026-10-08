@@ -1,10 +1,11 @@
 // Agent 状态牌: the Quote/0 agent status board as a Mac app.
 //
-// The app is in the Dock and has one window, which holds the settings. The board
-// itself works in the background, so there is also an icon in the menu bar: it says
-// whether the board is healthy and how many conversations are waiting, and its menu
-// shows the frame on the screen and each conversation's state. Closing the window
-// leaves the board running; quitting the app turns it off.
+// The app is in the Dock and has one window, which holds the settings (see UI/). The
+// board itself works in the background, so there is also an icon in the menu bar,
+// which can be turned off: it says whether the board is healthy and how many
+// conversations are waiting, and its menu shows the frame on the screen and each
+// conversation's state. Closing the window leaves the board running; quitting the
+// app turns it off.
 
 import AppKit
 import BoardCore
@@ -18,11 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hooks: HookSocket!
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
-    private lazy var settings = SettingsWindow { [weak self] in
-        guard let console = self?.console, console.port != 0 else { return nil }
-        return console.page
-    }
+    private var model: BoardModel!
+    private var window: SettingsWindow!
     private var saidFarewell = false
+    private static let showWindow = Notification.Name("com.quote0.agent-board.show")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let reason = Install.misplaced() {
@@ -32,8 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for other in NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "-")
         where other != NSRunningApplication.current {
             if other.bundleURL == Bundle.main.bundleURL {
-                // already in the menu bar: opening it again asks for the settings
-                if let page = URL(string: "http://127.0.0.1:\(ConfigStore.load().webPort)/") { NSWorkspace.shared.open(page) }
+                // already running: opening it again asks for its window
+                DistributedNotificationCenter.default().postNotificationName(AppDelegate.showWindow, object: nil, deliverImmediately: true)
                 exit(0)
             }
             // A copy somewhere else, such as the version this one replaces: only one can have the menu bar.
@@ -53,9 +53,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         console = Console(engine: engine)
         console.version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
         console.restart = { Install.relaunch() }
-        console.start(port: Int(environment["AGENT_BOARD_PORT"] ?? "") ?? engine.settings.webPort)
-        engine.onChange = { [weak self] in DispatchQueue.main.async { self?.draw() } }
+        model = BoardModel(engine: engine, console: console)
+        model.uninstall = { [weak self] in self?.uninstall() }
+        window = SettingsWindow(model: model)
+        engine.onChange = { [weak self] in
+            DispatchQueue.main.async {
+                self?.draw()
+                self?.model.refresh()
+            }
+        }
         engine.start()
+        DistributedNotificationCenter.default().addObserver(forName: AppDelegate.showWindow, object: nil, queue: .main) { [weak self] _ in
+            self?.openSettings()
+        }
 
         menu.delegate = self
         menu.autoenablesItems = false
@@ -67,7 +77,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.mainMenu = mainMenu()
         // Opened by hand rather than at login: show the window, as opening an app should.
         let snapshot = Paths.isDevelopment && environment["AGENT_BOARD_SNAPSHOT"] != nil
-        if (!Install.startedByLaunchd && !Paths.isDevelopment) || snapshot { openSettings() }
+        if snapshot {
+            window.show(Page(rawValue: environment["AGENT_BOARD_PAGE"] ?? "") ?? .overview)
+        } else if !Install.startedByLaunchd && !Paths.isDevelopment {
+            openSettings()
+        }
         draw()
     }
 
@@ -238,8 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if now.sessions.count > maxMenuRows { add("还有 \(now.sessions.count - maxMenuRows) 个") }
         menu.addItem(.separator())
 
-        add(now.needsSetup ? "连接设备…" : "打开设置…", console.port == 0 ? nil : #selector(openSettings))
-        if console.port == 0 { add("设置页打不开：端口 \(engine.settings.webPort) 被别的程序占用") }
+        add(now.needsSetup ? "连接设备…" : "打开设置…", #selector(openSettings))
         if !now.needsSetup {
             add("刷新屏幕", #selector(refreshScreen))
             add(now.paused ? "恢复" : "暂停", #selector(togglePause))
@@ -323,7 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Until a device is connected the settings have nothing to show, so they open on connecting one.
     @objc private func openSettings() {
         let needsSetup = engine.locked { !engine.dryRun && !engine.settings.ready }
-        settings.show(needsSetup ? "setup" : "")
+        window.show(needsSetup ? .setup : nil)
     }
 
     @objc private func refreshScreen() {

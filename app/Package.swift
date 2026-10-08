@@ -6,7 +6,7 @@ import PackageDescription
 
 let package = Package(
     name: "AgentBoard",
-    platforms: [.macOS(.v11)],
+    platforms: [.macOS(.v14)],
     targets: [
         .target(name: "BoardCore"),
         .executableTarget(name: "AgentBoard", dependencies: ["BoardCore"]),

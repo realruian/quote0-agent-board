@@ -37,7 +37,7 @@ FIRST_OPEN = f"""安装
 4. 打开「系统设置」→「隐私与安全性」，往下翻到「安全性」，在“已阻止打开「{NAME}」”旁边点「仍要打开」。
 5. 再打开一次。之后不会再提示。
 
-打开后菜单栏会多一个图标，浏览器会打开「连接设备」页面，照着填密钥、选设备即可。
+打开后会出现「连接设备」页面，照着填密钥、选设备即可。
 
 卸载：打开 App，在屏幕顶部的「Agent 状态牌」菜单里选「卸载…」，再把 App 拖进废纸篓。
 
@@ -71,7 +71,6 @@ def bundle(binary: Path) -> Path:
     resources.mkdir()
     shutil.copy2(binary, app / "Contents" / "MacOS" / "AgentBoard")
     shutil.copy2(ROOT / "menubar" / "AppIcon.icns", resources)
-    shutil.copytree(ROOT / "agent_board" / "web", resources / "web")
     shutil.copytree(ROOT / "agent_board" / "fonts", resources / "fonts")  # the pixel font, with its licence
     shutil.copy2(ROOT / "bin" / "agent-board-hook", resources)
     shutil.copy2(ROOT / "LICENSE", resources)
@@ -85,9 +84,10 @@ def bundle(binary: Path) -> Path:
             "CFBundlePackageType": "APPL",
             "CFBundleShortVersionString": VERSION,
             "CFBundleVersion": time.strftime("%Y%m%d.%H%M%S"),  # new for every build: macOS keeps icons by it
-            "LSMinimumSystemVersion": "11.0",
+            "LSMinimumSystemVersion": "14.0",
+            "CFBundleDevelopmentRegion": "zh-Hans",
+            "CFBundleLocalizations": ["zh-Hans"],  # so the system's own words (buttons, errors, dates) come out in Chinese too
             "NSHighResolutionCapable": True,
-            "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},  # the window shows pages served on 127.0.0.1
             "NSHumanReadableCopyright": "MIT License",
         }, f)
     run("codesign", "--force", "--sign", "-", str(app))

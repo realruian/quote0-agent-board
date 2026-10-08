@@ -81,7 +81,7 @@ public final class Console {
         return .object(out)
     }
 
-    func overview() -> JSON {
+    public func overview() -> JSON {
         engine.locked {
             let now = Date().timeIntervalSince1970
             let settings = engine.settings
@@ -101,7 +101,7 @@ public final class Console {
     }
 
     /// Render a frame with unsaved settings, without sending it anywhere.
-    func preview(_ body: JSON) throws -> Data {
+    public func preview(_ body: JSON) throws -> Data {
         var stored = ConfigStore.stored()
         for (key, value) in try checked({ try ConfigStore.validate(body["config"] ?? .object(JSONObject())) }).pairs { stored[key] = value }
         let draft = Settings(stored: stored)
@@ -113,7 +113,7 @@ public final class Console {
         }
     }
 
-    func settings() -> JSON {
+    public func settings() -> JSON {
         let (settings, known) = engine.locked { (engine.settings, Array(Set(engine.board.sessions.values.map(\.project))).sorted()) }
         return ["config": settings.editableJSON, "known_projects": JSON(known),
                 "fonts": .array(Fonts.available().map { ["key": .string($0.key), "label": .string($0.label)] })]
@@ -128,7 +128,7 @@ public final class Console {
         }
     }
 
-    func saveSettings(_ body: JSON) throws -> JSON {
+    public func saveSettings(_ body: JSON) throws -> JSON {
         try checked { try engine.applyConfig(body) }
         return settings()
     }
@@ -156,7 +156,7 @@ public final class Console {
     }
 
     /// Where connecting a device has got to: the key, then the device it is for.
-    func setup() -> JSON {
+    public func setup() -> JSON {
         let settings = engine.settings
         var state: JSONObject = ["ready": .bool(settings.ready), "key": keyState(settings), "device_id": .string(settings.deviceID), "devices": []]
         guard state["key"]?["present"]?.bool == true else { return .object(state) }
@@ -178,7 +178,7 @@ public final class Console {
         return .object(state)
     }
 
-    func saveSetup(_ body: JSON) throws -> JSON {
+    public func saveSetup(_ body: JSON) throws -> JSON {
         let settings = engine.settings
         if let given = body["key"] {
             let key = (given.string ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -225,7 +225,7 @@ public final class Console {
         return setup()
     }
 
-    func device() -> JSON {
+    public func device() -> JSON {
         let settings = engine.settings
         var info: JSONObject = ["device_id": .string(settings.deviceID), "key": keyState(settings), "ok": false]
         guard settings.ready else {
@@ -254,7 +254,7 @@ public final class Console {
         return .object(info)
     }
 
-    func saveDevice(_ body: JSON) throws -> JSON {
+    public func saveDevice(_ body: JSON) throws -> JSON {
         let settings = engine.settings
         var change = JSONObject()
         var interval = JSONObject()
@@ -313,11 +313,11 @@ public final class Console {
 
     private var hookInstalled: Bool { FileManager.default.isExecutableFile(atPath: Paths.hook.path) }
 
-    func integrations() -> JSON {
+    public func integrations() -> JSON {
         ["hook_installed": .bool(hookInstalled), "claude": Hooks.status("claude").json, "codex": Hooks.status("codex").json]
     }
 
-    func saveIntegration(_ body: JSON) throws -> JSON {
+    public func saveIntegration(_ body: JSON) throws -> JSON {
         guard let agent = body["agent"]?.string, Hooks.agents.contains(agent), let enabled = body["enabled"]?.bool else {
             throw Problem("请求格式不对")
         }
@@ -330,7 +330,7 @@ public final class Console {
         return integrations()
     }
 
-    func logTail() -> JSON {
+    public func logTail() -> JSON {
         Log.flush()
         guard let handle = try? FileHandle(forReadingFrom: Paths.log) else { return ["lines": []] }
         defer { try? handle.close() }
@@ -350,7 +350,7 @@ public final class Console {
     }
 
     /// Walk the chain from hooks to the screen. ok: true, false, or null for "worth a look".
-    func runChecks() -> JSON {
+    public func runChecks() -> JSON {
         let settings = engine.settings
         let now = Date().timeIntervalSince1970
         var results: [JSON] = []
@@ -410,7 +410,7 @@ public final class Console {
         return ["results": .array(results)]
     }
 
-    func about() -> JSON {
+    public func about() -> JSON {
         let home = Paths.tilde(Paths.home.path)
         let system = ProcessInfo.processInfo.operatingSystemVersion
         return ["version": .string(version), "runtime": .string("macOS \(system.majorVersion).\(system.minorVersion)"),
