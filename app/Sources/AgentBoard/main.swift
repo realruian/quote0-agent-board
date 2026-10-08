@@ -96,16 +96,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// The icon and the one line that say how the board is doing, the worst thing first.
-    private func status(_ now: Snapshot) -> (symbol: String, line: String) {
-        if now.needsSetup { return ("ellipsis.rectangle", "还没有连接设备") }
-        if now.paused { return ("pause.rectangle", "已暂停，屏幕不再更新") }
-        if now.dryRun { return (boardSymbol, "空跑模式，画面不会发到屏幕上") }
-        guard let push = now.lastPush else { return (boardSymbol, "还没有刷新过屏幕") }
-        if !push.ok { return ("exclamationmark.triangle", "最近一次刷新失败：\(push.message)") }
-        if push.delivered == false { return ("moon.zzz", "设备休眠或离线，最新画面还没显示") }
-        if now.quiet { return (boardSymbol, "夜间免打扰中，屏幕暂不刷新") }
-        return (boardSymbol, "屏幕已是最新 · \(ago(push.at))刷新")
+    /// The one line that says how the board is doing, the worst thing first, with the
+    /// symbol that goes beside it in the menu and the badge that goes on the icon.
+    private func status(_ now: Snapshot) -> (symbol: String, badge: String?, line: String) {
+        if now.needsSetup { return ("ellipsis.rectangle", "ellipsis", "还没有连接设备") }
+        if now.paused { return ("pause.rectangle", "pause.fill", "已暂停，屏幕不再更新") }
+        if now.dryRun { return (boardSymbol, nil, "空跑模式，画面不会发到屏幕上") }
+        guard let push = now.lastPush else { return (boardSymbol, nil, "还没有刷新过屏幕") }
+        if !push.ok { return ("exclamationmark.triangle", "exclamationmark", "最近一次刷新失败：\(push.message)") }
+        if push.delivered == false { return ("moon.zzz", "moon.fill", "设备休眠或离线，最新画面还没显示") }
+        if now.quiet { return (boardSymbol, nil, "夜间免打扰中，屏幕暂不刷新") }
+        return (boardSymbol, nil, "屏幕已是最新 · \(ago(push.at))刷新")
+    }
+
+    /// The board's own mark, the same in every state so it can be found, with a small badge
+    /// when there is something to say. Solid when a conversation is waiting.
+    private func statusIcon(badge: String?, filled: Bool) -> NSImage? {
+        let face = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+        guard let base = NSImage(systemSymbolName: filled ? boardSymbol + ".fill" : boardSymbol, accessibilityDescription: "Agent 状态牌")?
+            .withSymbolConfiguration(face) else { return nil }
+        guard let badge = badge, let mark = NSImage(systemSymbolName: badge, accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 8.5, weight: .black)) else {
+            base.isTemplate = true
+            return base
+        }
+        let size = NSSize(width: base.size.width + 5, height: base.size.height + 3)
+        let image = NSImage(size: size, flipped: false) { _ in
+            base.draw(at: NSPoint(x: 0, y: 3), from: .zero, operation: .sourceOver, fraction: 1)
+            let spot = NSRect(x: size.width - mark.size.width - 1, y: 0, width: mark.size.width, height: mark.size.height)
+            NSGraphicsContext.current?.compositingOperation = .clear  // a gap around the badge, so it reads apart from the board
+            NSBezierPath(ovalIn: spot.insetBy(dx: -1.5, dy: -1.5)).fill()
+            NSGraphicsContext.current?.compositingOperation = .sourceOver
+            mark.draw(in: spot)
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     private func ago(_ at: Double) -> String {
@@ -118,10 +144,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func draw() {
         guard let button = statusItem.button else { return }
         let now = snapshot()
-        let (symbol, line) = status(now)
+        let (_, badge, line) = status(now)
         let waiting = now.sessions.filter { $0.state == .waiting }.count
-        let name = waiting > 0 && symbol == boardSymbol ? boardSymbol + ".fill" : symbol
-        button.image = NSImage(systemSymbolName: name, accessibilityDescription: "Agent 状态牌")
+        button.image = statusIcon(badge: badge, filled: waiting > 0)
         button.imagePosition = .imageLeading
         // How many conversations are waiting for the user: the thing the board exists to say.
         button.title = waiting > 0 ? " \(waiting)" : (button.image == nil ? "状态牌" : "")
@@ -133,7 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let now = snapshot()
-        let (symbol, line) = status(now)
+        let (symbol, _, line) = status(now)
         if !now.needsSetup, let frame = NSImage(data: engine.framePNG()) { menu.addItem(frameItem(frame)) }
         add(line, symbol: symbol)
         menu.addItem(.separator())
