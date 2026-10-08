@@ -259,4 +259,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more, and [CHANGELOG.md](CHANGELOG.md
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The bundled Ark Pixel font is not covered by it; the font is distributed under the SIL OFL 1.1.

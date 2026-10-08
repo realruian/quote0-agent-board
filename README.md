@@ -256,4 +256,4 @@ AGENT_BOARD_HOME="$PWD/.dev-home" AGENT_BOARD_DRY_RUN=1 AGENT_BOARD_PORT=8766 py
 
 ## 许可证
 
-[MIT](LICENSE)
+[MIT](LICENSE)。随项目附带的方舟像素字体不在此列，它按 SIL OFL 1.1 分发。
