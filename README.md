@@ -102,28 +102,36 @@ flowchart TB
 
 循环列表里最好只留「图像 API」一项。有其他内容时，设备轮播到它们就会把状态牌换掉；后台进程会在一分钟内切回来，但屏幕会多闪两次。
 
-### 2. 保存 API 密钥
-
-在 Dot. App 的「更多」标签页进入「API 密钥」，创建一个密钥并复制（[官方说明](https://dot.mindreset.tech/docs/service/open/get_api)）。然后在终端里运行：
-
-```bash
-pbpaste > ~/.dot_api_key && chmod 600 ~/.dot_api_key
-```
-
-密钥只存在这个文件里，不会写进配置、日志或设置页。
-
-### 3. 找到设备序列号
-
-在 Dot. App 的「更多」标签页，点头像下方的设备列表，选中设备后复制设备 ID（[官方说明](https://dot.mindreset.tech/docs/service/open/get_device_id)）。
-
-### 4. 运行安装脚本
+### 2. 运行安装脚本
 
 ```bash
 git clone https://github.com/realruian/quote0-agent-board.git
 cd quote0-agent-board
 python3 -m pip install -r requirements.txt
+python3 install.py
+```
+
+### 3. 在打开的页面里连接设备
+
+安装脚本跑完会自动打开设置页的「连接设备」，照着做三步：
+
+1. **填 API 密钥**：在 Dot. App 的「更多」标签页进入「API 密钥」，创建一个密钥并复制（[官方说明](https://dot.mindreset.tech/docs/service/open/get_api)），粘贴进去。
+2. **选设备**：页面会列出这个密钥下的设备，点「使用这台」。
+3. **看一眼屏幕**：页面会检查「图像 API」有没有加好，可以发一张测试画面确认。
+
+以后要换密钥或换设备，也在这个页面里改。
+
+<details>
+<summary>不想用浏览器：在终端里提供密钥和设备</summary>
+
+把密钥存成文件，再把设备序列号（Dot. App 的「更多」标签页，头像下方的设备列表里，[官方说明](https://dot.mindreset.tech/docs/service/open/get_device_id)）传给安装脚本：
+
+```bash
+pbpaste > ~/.dot_api_key && chmod 600 ~/.dot_api_key
 python3 install.py --device <设备序列号>
 ```
+
+</details>
 
 后台进程会用你运行安装脚本时的那个 `python3`，Pillow 要装在它里面。用 Homebrew 的 Python 时，`pip` 可能拒绝安装，改用 `brew install pillow` 即可。
 
@@ -133,9 +141,9 @@ python3 install.py --device <设备序列号>
 2. 注册开机自启的后台进程（LaunchAgent `com.quote0.agent-board`）。
 3. 在 `~/.claude/settings.json` 里追加 9 个钩子。
 4. 在 `~/.codex/hooks.json` 里追加 7 个钩子。Codex 下次启动时会要求你确认信任。加 `--no-codex` 可跳过。
-5. 把设备插电时的轮播间隔调到 12 小时，减少状态牌被换掉的机会。加 `--no-hold` 可跳过。
-6. 把菜单栏 App 编译到 `~/Applications/Agent 状态牌.app`，并让它开机自启（LaunchAgent `com.quote0.agent-board.menubar`）。加 `--no-menubar` 可跳过。
+5. 把菜单栏 App 编译到 `~/Applications/Agent 状态牌.app`，并让它开机自启（LaunchAgent `com.quote0.agent-board.menubar`）。加 `--no-menubar` 可跳过。
 
+连接设备时，会把设备插电时的轮播间隔调到 12 小时，减少状态牌被换掉的机会。不想要的话，在设置页的「刷新」里关掉「始终显示状态牌」。
 钩子只对安装之后新开的对话生效。
 
 ## 菜单栏图标
@@ -209,7 +217,7 @@ python3 install.py --device <设备序列号>
 
 - **本项目发出去的只有渲染好的画面。** 读 Claude 额度时由 `claude` 命令行自己联系 Anthropic，本项目不经手它的登录信息。画面是一张 296×152 的黑白图，经 MindReset 的服务器发到设备。图上有对话名称、Agent 图标、状态、时长和额度百分比。不想让对话名称经过服务器的话，在设置页关掉"显示对话名称"，屏幕上就只显示项目文件夹的名字。
 - **钩子只把数据交给本机的后台进程。** 转发的是事件的前 4 KB，里面有对话编号、工作目录、工具名和你那句话的开头，没有文件内容和工具输出。
-- **API 密钥只从 `~/.dot_api_key` 读取**，不会出现在配置文件、日志和设置页里。
+- **API 密钥只存在 `~/.dot_api_key` 里**，只有你自己能读。在设置页里填的密钥由本机的后台进程写进这个文件，之后不会再出现在页面、配置文件或日志里。
 - **设置页只监听本机地址**，其他设备访问不到。请求要带页面自己的一次性口令，修改类请求还会校验来源，所以你浏览的其他网站调用不了它。菜单栏 App 从 `~/.quote0-agent-board/run/console.json` 读这个口令，这个文件只有你自己能读。
 
 发现安全问题请看 [SECURITY.md](SECURITY.md)。

@@ -187,6 +187,7 @@ input.field, select.field {
 input.field.num { width: 68px; text-align: right; }
 input.field.time { width: 96px; }
 input.field.name { width: 170px; }
+input.field.key { width: 240px; }
 input.field:focus-visible, button:focus-visible, .switch input:focus-visible + span {
   outline: 2px solid var(--accent);
   outline-offset: 1px;

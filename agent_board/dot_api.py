@@ -17,14 +17,14 @@ class DotError(Exception):
         self.message = message
 
 
-def _call(cfg: dict, method: str, path: str, body: dict | None = None, timeout: float = 20) -> dict | list:
-    url = f"{cfg['api_base']}/api/authV2/open/device/{cfg['device_id']}/{path}"
+def _request(cfg: dict, method: str, path: str, body: dict | None = None, key: str | None = None,
+             timeout: float = 20) -> dict | list:
     req = urllib.request.Request(
-        url,
+        f"{cfg['api_base']}/api/authV2/open/{path}",
         method=method,
         data=json.dumps(body).encode() if body is not None else None,
         headers={
-            "Authorization": f"Bearer {config.api_key(cfg)}",
+            "Authorization": f"Bearer {key or config.api_key(cfg)}",
             "Content-Type": "application/json",
         },
     )
@@ -38,6 +38,16 @@ def _call(cfg: dict, method: str, path: str, body: dict | None = None, timeout: 
         except (ValueError, AttributeError):
             message = raw[:200]
         raise DotError(e.code, message) from None
+
+
+def _call(cfg: dict, method: str, path: str, body: dict | None = None) -> dict | list:
+    return _request(cfg, method, f"device/{cfg['device_id']}/{path}", body)
+
+
+def devices(cfg: dict, key: str | None = None) -> list:
+    """The devices an API key can reach. `key` tries one that is not stored yet."""
+    found = _request(cfg, "GET", "devices", key=key)
+    return found if isinstance(found, list) else []
 
 
 def push_image(cfg: dict, png: bytes, black_border: bool = False) -> str:

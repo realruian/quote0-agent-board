@@ -3,7 +3,8 @@
 Nothing here is reachable from other machines. Requests must name this host
 (blocks DNS rebinding), carry the per-run token the page was served with, and,
 when they change something, come from this origin (blocks other sites' pages).
-The device API key is never sent to the browser.
+The device API key is never sent to the browser; connecting a device takes one
+from the page, checks it with MindReset and stores it.
 
 The menu bar app is not a page, so it reads the port and the token from a file
 in the board's own directory, which only this user can open.
@@ -63,6 +64,7 @@ def overview(app) -> dict:
             "version": __version__, "dry_run": app.dry_run, "started_at": app.started_at, "now": now,
             "view_kind": app.current_view(now)["kind"], "sessions": sessions, "last_push": app.last_push,
             "usage": app.usage or {}, "show_usage": app.cfg["show_usage"], "paused": app.cfg["paused"],
+            "needs_setup": not app.dry_run and not config.ready(app.cfg),
         }
     return app.call(read)
 
@@ -116,9 +118,85 @@ def _device_backup() -> Path:
     return config.home() / "device-settings-backup.json"
 
 
+def _release_hold(cfg: dict) -> None:
+    """Give a device back the loop interval it had before the board was kept up on it."""
+    backup = _device_backup()
+    try:
+        previous = json.loads(backup.read_text()).get("powerMs")
+        if previous:
+            dot_api.set_intervals(cfg, power_ms=previous)
+    except Exception as e:  # the device may be gone, which is often why another is being chosen
+        log.warning("could not restore the previous device's loop interval: %s", e)
+    backup.unlink(missing_ok=True)
+
+
+def setup(app) -> dict:
+    """Where connecting a device has got to: the key, then the device it is for."""
+    cfg = app.cfg
+    state: dict = {"ready": config.ready(cfg), "key": _key_state(cfg), "device_id": cfg["device_id"], "devices": []}
+    if not state["key"]["present"]:
+        return state
+    try:
+        found = dot_api.devices(cfg)
+    except Exception as e:
+        state["error"] = str(e)
+        return state
+    for item in found:
+        entry = {"id": str(item.get("id") or ""), "model": str(item.get("model") or ""), "alias": ""}
+        try:  # the name it has in the Dot app tells two devices apart better than a serial number
+            entry["alias"] = dot_api.get_settings({**cfg, "device_id": entry["id"]}).get("alias") or ""
+        except Exception:
+            pass
+        state["devices"].append(entry)
+    return state
+
+
+def save_setup(app, body: dict) -> dict:
+    cfg = app.cfg
+    if "key" in body:
+        key = body["key"].strip() if isinstance(body["key"], str) else ""
+        if not key.startswith("dot_app") or len(key) > 300 or not key.isascii() or not key.isprintable() or " " in key:
+            raise Problem("这不像 Dot 的 API 密钥，它以 dot_app 开头")
+        try:
+            dot_api.devices(cfg, key)
+        except dot_api.DotError as e:
+            raise Problem("MindReset 说这个密钥无效，请重新复制一次" if e.status in (400, 401, 403)
+                          else f"MindReset 服务没有接受这个密钥：{e.message}") from None
+        except Exception as e:
+            raise Problem(f"连不上 MindReset 服务：{e}", 502) from None
+        path = config.api_key_path(cfg)
+        tmp = path.with_name(path.name + ".tmp")
+        with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+            f.write(key + "\n")
+        os.replace(tmp, path)
+        log.info("API key saved from the settings page")
+    if "device_id" in body:
+        wanted = body["device_id"]
+        try:
+            known = {str(item.get("id")) for item in dot_api.devices(cfg)}
+        except Exception as e:
+            raise Problem(f"连不上 MindReset 服务：{e}", 502) from None
+        if not isinstance(wanted, str) or wanted not in known:
+            raise Problem("这个密钥下没有这台设备")
+        if wanted != cfg["device_id"]:
+            if cfg["device_id"]:
+                _release_hold(cfg)
+            app.call(app.use_device, wanted)
+            try:  # as the installer does: other loop content should not replace the board
+                save_device(app, {"keep": True})
+            except Problem as e:
+                log.warning("could not keep the board up on the new device: %s", e)
+    if "key" not in body and "device_id" not in body:
+        raise Problem("没有要修改的内容")
+    return setup(app)
+
+
 def device(app) -> dict:
     cfg = app.cfg
     info: dict = {"device_id": cfg["device_id"], "key": _key_state(cfg), "ok": False}
+    if not config.ready(cfg):
+        info.update(error="还没有连接设备", needs_setup=True)
+        return info
     try:
         status = dot_api.get_status(cfg)
         current = dot_api.get_settings(cfg)
@@ -264,6 +342,8 @@ def run_checks(app) -> dict:
     add("API 密钥", key["looks_valid"], "格式正确" if key["looks_valid"] else
         ("文件里的内容不像 Dot 密钥" if key["present"] else f"没有找到 {cfg['api_key_file']}"))
     try:
+        if not cfg["device_id"]:
+            raise RuntimeError("还没有选择设备，在设置页的“连接设备”里完成")
         slots = {item.get("type") for item in dot_api.loop_list(cfg)}
         add("连接 MindReset 服务", True, "正常")
         add("图像 API 内容", "IMAGE_API" in slots,
@@ -335,9 +415,10 @@ def farewell(app, body: dict) -> dict:
     return {"ok": True}
 
 
-GET_JSON = {"/api/overview": overview, "/api/settings": settings, "/api/device": device,
+GET_JSON = {"/api/overview": overview, "/api/settings": settings, "/api/device": device, "/api/setup": setup,
             "/api/integrations": integrations, "/api/log": log_tail, "/api/about": about}
-POST_JSON = {"/api/settings": save_settings, "/api/device": save_device, "/api/integrations": save_integration,
+POST_JSON = {"/api/settings": save_settings, "/api/device": save_device, "/api/setup": save_setup,
+             "/api/integrations": save_integration,
              "/api/check": lambda app, body: run_checks(app), "/api/refresh": refresh,
              "/api/test-frame": test_frame, "/api/restart": restart, "/api/farewell": farewell}
 

@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Install or remove the Quote/0 agent status board.
 
-    python3 install.py --device <deviceId>     install (or update) everything
+    python3 install.py                         install (or update) everything
     python3 install.py --uninstall             remove hooks and the background process
+
+The device and its API key are connected afterwards in the settings page, which
+opens by itself the first time. `--device <deviceId>` with the key already in
+~/.dot_api_key does the same without the browser.
 
 Install copies the runtime to ~/.quote0-agent-board, adds hooks next to the ones
 already in ~/.claude/settings.json and ~/.codex/hooks.json, starts a LaunchAgent,
@@ -145,16 +149,16 @@ def install(args: argparse.Namespace) -> None:
     stored = json.loads(cfg_file.read_text()) if cfg_file.exists() else {}
     if args.device:
         stored["device_id"] = args.device
-    if not stored.get("device_id"):
-        raise SystemExit("pass --device <deviceId> on first install")
     cfg_file.write_text(json.dumps(stored, indent=2, ensure_ascii=False) + "\n")
     cfg = config.load()
+    connected = config.ready(cfg)  # otherwise the settings page takes the key and the device
 
-    kinds = {item.get("type") for item in dot_api.loop_list(cfg)}
-    if "IMAGE_API" not in kinds:
-        raise SystemExit("The device's loop list has no Image API content. Add 图像 API in the Dot. app "
-                         "(内容工坊 → 循环列表), then run this again.")
-    say(f"device {cfg['device_id']}: reachable, Image API slot present")
+    if connected:
+        kinds = {item.get("type") for item in dot_api.loop_list(cfg)}
+        if "IMAGE_API" not in kinds:
+            raise SystemExit("The device's loop list has no Image API content. Add 图像 API in the Dot. app "
+                             "(内容工坊 → 循环列表), then run this again.")
+        say(f"device {cfg['device_id']}: reachable, Image API slot present")
 
     shutil.rmtree(HOME / "app" / "agent_board", ignore_errors=True)
     shutil.copytree(ROOT / "agent_board", HOME / "app" / "agent_board",
@@ -163,7 +167,7 @@ def install(args: argparse.Namespace) -> None:
     os.chmod(hooks.hook_path(), 0o755)
     say(f"runtime copied to {HOME}")
 
-    if not args.no_hold:
+    if connected and not args.no_hold:
         current = dot_api.get_settings(cfg).get("interval", {})
         if not DEVICE_BACKUP.exists():
             DEVICE_BACKUP.write_text(json.dumps(current))
@@ -179,7 +183,16 @@ def install(args: argparse.Namespace) -> None:
         say(f"Codex hooks ({hooks.FILES['codex']}): {hooks.set_enabled('codex', True)}")
     if not args.no_menubar:
         say(f"menu bar app: {install_menubar()}")
-    say(f"settings page: http://127.0.0.1:{cfg['web_port']}")
+    page = f"http://127.0.0.1:{cfg['web_port']}"
+    if connected:
+        say(f"settings page: {page}")
+        return
+    for _ in range(100):  # the page is served by the process that has just been started
+        if config.console_path().exists():
+            break
+        time.sleep(0.1)
+    say(f"one step left: connect your Quote/0 in the page that opens now ({page}/#setup)")
+    subprocess.run(["open", f"{page}/#setup"])
 
 
 def uninstall(args: argparse.Namespace) -> None:

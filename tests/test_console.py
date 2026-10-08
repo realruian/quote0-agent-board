@@ -80,7 +80,8 @@ class SleepingDeviceTest(unittest.IsolatedAsyncioTestCase):
     AWAKE = {"status": {"current": "电源活跃"}}
 
     async def check(self, app, status):
-        with mock.patch.object(dot_api, "get_status", return_value=status):
+        with mock.patch.object(dot_api, "get_status", return_value=status), \
+                mock.patch.object(config, "ready", return_value=True):
             await app.check_screen()
 
     def test_push_reply_says_whether_the_frame_is_on_screen(self):
@@ -232,6 +233,57 @@ class ConsoleTest(unittest.TestCase):
             self.assertEqual((view["kind"], view["line"]), ("quiet", "已退出"))
         finally:
             self.app.farewell_until = 0.0
+
+    def test_setup_saves_a_key_and_takes_a_device(self):
+        key_file = Path(_HOME.name) / "dot_api_key"
+        config.save({"api_key_file": str(key_file)})  # never the real one in the user's home
+        self.app.cfg = config.load()
+
+        def undo():
+            config.save({"api_key_file": config.DEFAULTS["api_key_file"], "device_id": ""})
+            self.app.cfg = config.load()
+            web._device_backup().unlink(missing_ok=True)
+        self.addCleanup(undo)
+
+        def devices(cfg, key=None):
+            if (key or config.api_key(cfg)) != "dot_app_good":
+                raise dot_api.DotError(400, "This API key is invalid. Check the key and try again.")
+            return [{"id": "D0", "model": "quote_0"}, {"id": "D1", "model": "quote_0"}]
+
+        def settings(cfg):
+            return {"alias": "书桌" if cfg["device_id"] == "D0" else None, "interval": {"powerMs": 300_000}}
+
+        def state(*request):
+            status, _, raw = self.request(*request)
+            self.assertNotIn(b"dot_app_good", raw)  # the key goes in and never comes back
+            return status, json.loads(raw)
+
+        with mock.patch.object(dot_api, "devices", side_effect=devices), \
+                mock.patch.object(dot_api, "get_settings", side_effect=settings), \
+                mock.patch.object(dot_api, "update_settings") as update, \
+                mock.patch.object(web, "device", return_value={"ok": True}):
+            self.assertEqual(state("GET", "/api/setup")[1], {
+                "ready": False, "key": {"present": False, "looks_valid": False}, "device_id": "", "devices": []})
+            with mock.patch.object(self.app, "dry_run", False):
+                self.assertTrue(json.loads(self.request("GET", "/api/overview")[2])["needs_setup"])
+            for bad in ("nope", "dot_app_bad", "dot_app with spaces", 7):
+                self.assertEqual(state("POST", "/api/setup", {"key": bad})[0], 400, bad)
+            self.assertFalse(key_file.exists())
+
+            status, found = state("POST", "/api/setup", {"key": " dot_app_good\n"})
+            self.assertEqual((status, found["ready"], found["key"]["looks_valid"]), (200, False, True))
+            self.assertEqual(found["devices"], [{"id": "D0", "model": "quote_0", "alias": "书桌"},
+                                                {"id": "D1", "model": "quote_0", "alias": ""}])
+            self.assertEqual((key_file.read_text(), key_file.stat().st_mode & 0o777), ("dot_app_good\n", 0o600))
+
+            self.assertEqual(state("POST", "/api/setup", {"device_id": "D9"})[0], 400)
+            status, found = state("POST", "/api/setup", {"device_id": "D1"})
+            self.assertEqual((status, found["ready"], found["device_id"]), (200, True, "D1"))
+            self.assertEqual((self.app.cfg["device_id"], config.load()["device_id"]), ("D1", "D1"))
+            update.assert_called_once_with(mock.ANY, {"interval": {"powerMs": 43_200_000}})  # the board is kept up
+            with mock.patch.object(self.app, "dry_run", False):
+                self.assertFalse(json.loads(self.request("GET", "/api/overview")[2])["needs_setup"])
+        self.assertEqual(self.request("POST", "/api/setup", {})[0], 400)
 
     def test_overview_lists_sessions(self):
         self.app.call(self.app.on_event, "claude", "UserPromptSubmit", {"session_id": "s", "cwd": "/p/alpha"})

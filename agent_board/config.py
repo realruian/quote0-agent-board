@@ -84,8 +84,17 @@ def save(patch: dict) -> None:
     os.replace(tmp, path)
 
 
+def api_key_path(cfg: dict) -> Path:
+    return Path(cfg["api_key_file"]).expanduser()
+
+
 def api_key(cfg: dict) -> str:
-    return Path(cfg["api_key_file"]).expanduser().read_text().strip()
+    return api_key_path(cfg).read_text().strip()
+
+
+def ready(cfg: dict) -> bool:
+    """Whether there is a device to send frames to: one has been chosen and its key is in place."""
+    return bool(cfg["device_id"]) and api_key_path(cfg).is_file()
 
 
 def _int(value, low: int, high: int, label: str) -> int:

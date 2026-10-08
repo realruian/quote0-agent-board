@@ -220,6 +220,7 @@ async function overviewPage(mount, onLeave) {
   let device = null;
   let lastPush = {};
   let dryRun = false;
+  let needsSetup = false;
 
   // A sleeping device keeps its old frame: say so, or the stale screen looks like a fault.
   function drawBanner() {
@@ -227,7 +228,8 @@ async function overviewPage(mount, onLeave) {
     const since = device && device.last_render ? `，屏幕停在 ${device.last_render} 的画面` : "";
     banner.replaceChildren(
       dryRun ? h("div", { class: "banner" }, "空跑模式：画面只在本机生成，不会发到屏幕上。") : "",
-      missed ? h("div", { class: "banner" }, `设备休眠或离线，最新画面没有显示出来${since}。接上电源后会自动补上；用电池时要等它下次醒来。`,
+      needsSetup ? h("div", { class: "banner" }, "还没有连接设备，画面发不到屏幕上。 ", link("连接设备", "setup")) : "",
+      missed && !needsSetup ? h("div", { class: "banner" }, `设备休眠或离线，最新画面没有显示出来${since}。接上电源后会自动补上；用电池时要等它下次醒来。`,
         link("更改刷新间隔", "refresh/battery")) : "");
   }
 
@@ -261,7 +263,8 @@ async function overviewPage(mount, onLeave) {
     const s = d.status || {};
     device = d;
     drawBanner();
-    if (!d.ok) deviceLine.replaceChildren(dot("bad"), `连不上设备：${d.error || "未知原因"}`);
+    if (d.needs_setup) deviceLine.replaceChildren(dot("warn"), "还没有连接设备 ", link("去连接", "setup"));
+    else if (!d.ok) deviceLine.replaceChildren(dot("bad"), `连不上设备：${d.error || "未知原因"}`);
     else if ((s.battery || "").includes("已连接电源")) deviceLine.replaceChildren(dot("ok"), "设备已接电源，有变化就刷新");
     else deviceLine.replaceChildren(dot(d.asleep ? "warn" : "ok"),
       `设备：${[s.current, s.battery].filter(Boolean).join(" · ")}，用电池时每 ${d.battery_minutes} 分钟刷新一次 `, link("更改", "refresh/battery"));
@@ -290,6 +293,7 @@ async function overviewPage(mount, onLeave) {
     const missed = push.ok && push.delivered === false;
     lastPush = push;
     dryRun = data.dry_run;
+    needsSetup = data.needs_setup;
     drawBanner();
     const pushedAt = push.at || 0;
     if (pushedAt !== frameVersion) {
@@ -307,7 +311,7 @@ async function overviewPage(mount, onLeave) {
       data.paused && h("div", null, dot("warn"), "已暂停，屏幕不再更新 ", h("a", { href: "#overview", onclick: resume }, "恢复")),
       quiet && !data.paused && h("div", null, dot("warn"), "夜间免打扰中，屏幕暂不刷新"),
     ].filter(Boolean);
-    if (!notes.length && !data.dry_run) notes.push(h("div", null, dot(push.at ? "ok" : ""), push.at ? "屏幕已是最新" : "还没有刷新过屏幕"));
+    if (!notes.length && !data.dry_run && !data.needs_setup) notes.push(h("div", null, dot(push.at ? "ok" : ""), push.at ? "屏幕已是最新" : "还没有刷新过屏幕"));
     lines.replaceChildren(...notes);
     quota.replaceChildren(quotaRow("Claude", data.usage.claude), quotaRow("Codex", data.usage.codex));
     sessions.replaceChildren(...(data.sessions.length
@@ -539,9 +543,13 @@ async function devicePage(mount) {
   mount.append(body);
 
   function draw(d) {
+    if (d.needs_setup) {
+      body.replaceChildren(h("div", { class: "banner" }, "还没有连接设备。 ", link("连接设备", "setup")));
+      return;
+    }
     if (!d.ok) {
       body.replaceChildren(
-        h("div", { class: "banner" }, `连不上设备：${d.error}`),
+        h("div", { class: "banner" }, `连不上设备：${d.error} `, link("更换密钥或设备", "setup")),
         card(info("设备序列号", d.device_id), info("API 密钥", d.key.looks_valid ? "格式正确" : d.key.present ? "内容不像 Dot 密钥" : "没有找到密钥文件")),
         h("div", { class: "btn-row", style: "margin-top:12px" }, button("重试", load)));
       return;
@@ -573,7 +581,7 @@ async function devicePage(mount) {
       section("名称"),
       card(
         row("设备名称", "显示在 Dot. App 里", alias, button("保存", () => apply({ alias: alias.value }, "已保存")))),
-      hint("刷新间隔和休眠时段在", link("刷新", "refresh"), "里。更换密钥或设备需要重新运行安装命令。"));
+      hint("刷新间隔和休眠时段在", link("刷新", "refresh"), "里。更换密钥或设备在", link("连接设备", "setup"), "里。"));
   }
 
   async function load() {
@@ -585,6 +593,94 @@ async function devicePage(mount) {
     }
   }
   await load();
+}
+
+// Connecting a device: the key, then the device it is for, then whether that device can show the board.
+async function setupPage(mount) {
+  const MODEL = { quote_0: "Quote/0" };
+  const body = h("div");
+  mount.append(body);
+  let changingKey = false;
+
+  async function send(patch, done) {
+    const state = await api("/api/setup", patch);
+    changingKey = false;
+    draw(state);
+    toast(done);
+  }
+
+  function keyCard(state) {
+    if (state.key.present && !state.error && !changingKey) {
+      return card(row("API 密钥", `已保存，能访问 ${state.devices.length} 台设备`, button("更换", () => {
+        changingKey = true;
+        draw(state);
+      })));
+    }
+    const input = h("input", { class: "field key", type: "password", autocomplete: "off", placeholder: "dot_app_…", "aria-label": "API 密钥" });
+    const save = button("保存", () => busy(save, async () => {
+      if (!input.value.trim()) throw new Error("先把密钥粘贴进来");
+      await send({ key: input.value }, "密钥已保存");
+    }));
+    input.addEventListener("keydown", (event) => event.key === "Enter" && save.click());
+    return card(row("API 密钥", ["在 Dot. App 的「更多」→「API 密钥」里创建并复制，粘贴到这里。",
+      h("a", { href: "https://dot.mindreset.tech/docs/service/open/get_api", target: "_blank", rel: "noreferrer" }, "官方说明")], input, save));
+  }
+
+  function deviceCard(state) {
+    if (!state.devices.length) return card(h("div", { class: "empty" }, "这个密钥下还没有设备。先在 Dot. App 里绑定一台 Quote/0，再回来刷新这个页面。"));
+    return card(state.devices.map((d) => {
+      const use = button("使用这台", () => busy(use, () => send({ device_id: d.id }, "设备已连接")));
+      return row(d.alias || MODEL[d.model] || d.model || "设备", [d.alias && (MODEL[d.model] || d.model), `序列号 ${d.id}`].filter(Boolean).join(" · "),
+        d.id === state.device_id ? pill("正在使用", "ok") : use);
+    }));
+  }
+
+  function screenCard() {
+    const slot = h("div");
+    const check = async () => {
+      slot.replaceChildren(h("div", { class: "empty" }, "正在检查设备…"));
+      let d;
+      try {
+        d = await api("/api/device");
+      } catch (error) {
+        d = { ok: false, error: error.message };
+      }
+      const again = button("重新检查", check);
+      if (!d.ok) {
+        slot.replaceChildren(row(h("span", null, dot("bad"), "连不上设备"), d.error, again));
+        return;
+      }
+      const s = d.status || {};
+      const test = button("发送测试画面", () => busy(test, async () => {
+        await api("/api/test-frame", {});
+        toast("测试画面已发出，15 秒后自动恢复");
+      }));
+      slot.replaceChildren(
+        d.image_slot
+          ? row(h("span", null, dot("ok"), "图像 API"), "已在设备的循环列表里，状态牌显示在这一项", test)
+          : row(h("span", null, dot("bad"), "图像 API"), "循环列表里还没有。打开 Dot. App 的内容工坊，把「图像 API」加进这台设备的循环列表，再点重新检查", again),
+        row(h("span", null, dot((s.battery || "").includes("已连接电源") ? "ok" : "warn"), "供电"),
+          (s.battery || "").includes("已连接电源") ? "已接电源，有变化就刷新" : `${s.battery || "未知"}。用电池时设备会休眠，隔一段时间才刷新一次，建议一直插着电`));
+    };
+    check();
+    return h("div", { class: "card" }, slot);
+  }
+
+  function draw(state) {
+    body.replaceChildren(...[
+      state.error && h("div", { class: "banner" }, `用保存的密钥连不上 MindReset 服务：${state.error}。可以重新填一次密钥。`),
+      section("第 1 步 · API 密钥"), keyCard(state),
+      hint("密钥只保存在这台电脑上，只发给 MindReset 的服务。"),
+      state.key.present && !state.error && section("第 2 步 · 设备"),
+      state.key.present && !state.error && deviceCard(state),
+      state.ready && section("第 3 步 · 屏幕"),
+      state.ready && screenCard(),
+      state.ready && h("div", { class: "btn-row", style: "margin-top:12px" }, button("完成", () => (location.hash = "overview"))),
+      state.ready && hint("哪些 Agent 的状态显示在屏幕上，在", link("Agent", "integrations"), "里。"),
+    ].filter(Boolean));
+  }
+
+  draw(await api("/api/setup"));
 }
 
 async function diagnosticsPage(mount) {
@@ -647,6 +743,7 @@ const PAGES = [
   { id: "alerts", label: "提醒", color: "t-red", render: alertsPage },
   { id: "integrations", label: "Agent", color: "t-green", render: integrationsPage },
   { id: "device", label: "设备", color: "t-orange", render: devicePage },
+  { id: "setup", label: "连接设备", color: "t-orange", icon: "device", hidden: true, render: setupPage },  // reached from links, not the sidebar
   { id: "diagnostics", label: "诊断", color: "t-teal", group: "高级", render: diagnosticsPage },
   { id: "about", label: "关于", color: "t-gray", render: aboutPage },
 ];
@@ -667,7 +764,7 @@ async function show() {
   document.getElementById("page-title").textContent = page.label;
   const tile = document.getElementById("page-tile");
   tile.className = `tile ${page.color}`;
-  tile.replaceChildren(SVG(ICONS[page.id]));
+  tile.replaceChildren(SVG(ICONS[page.icon || page.id]));
   document.title = `${page.label} · Agent 状态牌`;
 
   const mount = h("div");
@@ -686,7 +783,7 @@ async function show() {
 
 function buildSidebar() {
   const sidebar = document.getElementById("sidebar");
-  for (const page of PAGES) {
+  for (const page of PAGES.filter((p) => !p.hidden)) {
     if (page.group) sidebar.append(h("h2", null, page.group));
     sidebar.append(h("button", { class: "nav", type: "button", "data-page": page.id, onclick: () => (location.hash = page.id) },
       h("span", { class: `tile ${page.color}` }, SVG(ICONS[page.id])), page.label));
@@ -694,6 +791,17 @@ function buildSidebar() {
   sidebar.append(h("h2", null, `v${version}`));
 }
 
-buildSidebar();
-addEventListener("hashchange", show);
-show();
+async function start() {
+  buildSidebar();
+  addEventListener("hashchange", show);
+  if (!location.hash) {
+    try {  // nothing can be shown until a device is connected, so begin there
+      if ((await api("/api/overview")).needs_setup) history.replaceState(null, "", "#setup");
+    } catch {
+      // the page that opens says what is wrong
+    }
+  }
+  show();
+}
+
+start();

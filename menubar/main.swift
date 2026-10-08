@@ -41,6 +41,7 @@ struct Overview: Decodable {
     let dry_run: Bool
     let view_kind: String
     let paused: Bool
+    let needs_setup: Bool
     let sessions: [Session]
     let last_push: Push
 }
@@ -90,8 +91,9 @@ final class Console {
         return try? JSONDecoder().decode(Address.self, from: data)
     }
 
-    var page: URL? {
-        address.flatMap { URL(string: "http://127.0.0.1:\($0.port)/") }
+    /// A page of the settings, named the way the page's own links name it.
+    func page(_ name: String = "") -> URL? {
+        address.flatMap { URL(string: "http://127.0.0.1:\($0.port)/#\(name)") }
     }
 
     /// Calls back on the main thread with the reply's body, or nil when the daemon did not answer with success.
@@ -190,6 +192,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return misses < 2 ? (boardSymbol, "正在连接后台进程…") : ("exclamationmark.triangle", "连不上后台进程")
         }
         let push = overview.last_push
+        if overview.needs_setup {
+            return ("ellipsis.rectangle", "还没有连接设备")
+        }
         if overview.paused {
             return ("pause.rectangle", "已暂停，屏幕不再更新")
         }
@@ -259,8 +264,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
-        add("打开设置…", console.page == nil ? nil : #selector(openSettings), key: ",")
-        if let overview = live {
+        add(live?.needs_setup == true ? "连接设备…" : "打开设置…", console.page() == nil ? nil : #selector(openSettings), key: ",")
+        if let overview = live, !overview.needs_setup {
             add("刷新屏幕", #selector(refreshScreen))
             add(overview.paused ? "恢复" : "暂停", #selector(togglePause))
         } else if misses >= 2 && developmentHome == nil {
@@ -329,8 +334,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // -- what the menu can do ------------------------------------------------
 
+    /// Until a device is connected the settings have nothing to show, so they open on connecting one.
     @objc private func openSettings() {
-        if let page = console.page {
+        if let page = console.page(live?.needs_setup == true ? "setup" : "") {
             NSWorkspace.shared.open(page)
         }
     }

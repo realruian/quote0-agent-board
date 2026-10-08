@@ -105,28 +105,36 @@ In the Dot. app, open 内容工坊 (Content Studio) and add 图像 API (Image AP
 
 It is best to keep Image API as the only item in the loop. When the device rotates to other content it replaces the board; the daemon switches back within a minute, at the cost of two extra flashes.
 
-### 2. Save your API key
-
-In the Dot. app, go to the 更多 (More) tab, open API 密钥 (API Key), create a key and copy it ([official guide](https://dot.mindreset.tech/docs/service/open/get_api)). Then run:
-
-```bash
-pbpaste > ~/.dot_api_key && chmod 600 ~/.dot_api_key
-```
-
-The key lives in that file only. It is never written to the configuration, the log or the settings page.
-
-### 3. Find the device serial number
-
-In the Dot. app, go to the 更多 (More) tab, tap the device list under your avatar, choose the device and copy its device ID ([official guide](https://dot.mindreset.tech/docs/service/open/get_device_id)).
-
-### 4. Run the installer
+### 2. Run the installer
 
 ```bash
 git clone https://github.com/realruian/quote0-agent-board.git
 cd quote0-agent-board
 python3 -m pip install -r requirements.txt
+python3 install.py
+```
+
+### 3. Connect the device in the page that opens
+
+When the installer finishes it opens the settings page at 连接设备 (Connect a device). There are three steps:
+
+1. **Enter your API key**: in the Dot. app, go to the 更多 (More) tab, open API 密钥 (API Key), create a key and copy it ([official guide](https://dot.mindreset.tech/docs/service/open/get_api)), then paste it in.
+2. **Choose the device**: the page lists the devices that key can reach; press 使用这台 (Use this one).
+3. **Check the screen**: the page checks that Image API is in the loop list, and can send a test frame.
+
+To change the key or the device later, use the same page.
+
+<details>
+<summary>Without a browser: give the key and the device in the terminal</summary>
+
+Save the key to a file, and pass the device serial number (in the Dot. app's 更多 tab, in the device list under your avatar; [official guide](https://dot.mindreset.tech/docs/service/open/get_device_id)) to the installer:
+
+```bash
+pbpaste > ~/.dot_api_key && chmod 600 ~/.dot_api_key
 python3 install.py --device <device-serial-number>
 ```
+
+</details>
 
 The daemon runs with the same `python3` you ran the installer with, so Pillow has to be installed for that one. With Homebrew's Python, `pip` may refuse to install; use `brew install pillow` instead.
 
@@ -136,9 +144,9 @@ The installer does the following, backing up every file it edits to `~/.quote0-a
 2. Registers a daemon that starts at login (LaunchAgent `com.quote0.agent-board`).
 3. Appends 9 hooks to `~/.claude/settings.json`.
 4. Appends 7 hooks to `~/.codex/hooks.json`. Codex will ask you to trust them the next time it starts. Pass `--no-codex` to skip.
-5. Raises the device's loop interval on power to 12 hours, so the board is replaced less often. Pass `--no-hold` to skip.
-6. Compiles the menu bar app into `~/Applications/Agent 状态牌.app` and has it open at login (LaunchAgent `com.quote0.agent-board.menubar`). Pass `--no-menubar` to skip.
+5. Compiles the menu bar app into `~/Applications/Agent 状态牌.app` and has it open at login (LaunchAgent `com.quote0.agent-board.menubar`). Pass `--no-menubar` to skip.
 
+Connecting a device raises its loop interval on power to 12 hours, so the board is replaced less often. To undo that, turn off 始终显示状态牌 (always show the board) on the settings page under 刷新.
 Hooks only apply to conversations started after installation.
 
 ## Menu bar icon
@@ -212,7 +220,7 @@ Every e-ink refresh flashes the whole screen for about two seconds, so refreshes
 
 - **The rendered frame is all the project sends out.** Reading Claude quota has the `claude` command line contact Anthropic itself; the project never handles its sign-in. The frame is a 296×152 black-and-white image that travels through MindReset's servers to the device. It shows conversation names, agent icons, states, durations and quota percentages. If you would rather not send conversation names through a server, turn off "显示对话名称" (show conversation names) on the settings page; the screen then shows project folder names only.
 - **Hooks hand data to the local daemon only.** What they forward is the first 4 KB of the event: the conversation ID, working directory, tool name and the start of your prompt. No file contents and no tool output.
-- **The API key is read from `~/.dot_api_key` only** and never appears in the configuration file, the log or the settings page.
+- **The API key lives in `~/.dot_api_key` only**, readable by you alone. A key entered on the settings page is written to that file by the local daemon and does not appear on the page, in the configuration file or in the log afterwards.
 - **The settings page listens on the loopback address only**, so other devices cannot reach it. Requests must carry the page's own one-time token, and requests that change something are also checked for their origin, so other websites you visit cannot call it. The menu bar app reads that token from `~/.quote0-agent-board/run/console.json`, a file only you can read.
 
 To report a security issue, see [SECURITY.md](SECURITY.md).

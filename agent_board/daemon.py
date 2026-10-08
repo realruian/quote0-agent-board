@@ -187,6 +187,12 @@ class App:
         log.info("settings changed: %s", ", ".join(sorted(clean)))
         return self.cfg
 
+    def use_device(self, device_id: str) -> None:
+        config.save({"device_id": device_id})
+        self.cfg = config.load()
+        log.info("device chosen in setup")
+        self.force_refresh()
+
     def force_refresh(self) -> None:
         self.last_sig = ""
         self.urgent.set()
@@ -226,6 +232,8 @@ class App:
         if self.dry_run:
             log.info("dry run: rendered %s frame, not sent", view["kind"])
             return "空跑模式，没有发送"
+        if not config.ready(self.cfg):
+            return "还没有连接设备，没有发送"
         message = dot_api.push_image(self.cfg, png, black_border=view["kind"] == "wait")
         log.info("pushed %s frame (%d bytes): %s", view["kind"], len(png), message)
         return message
@@ -298,7 +306,7 @@ class App:
         """Put the board back if the device has moved on to other loop content, and
         send the current frame once a device that slept through one is awake again."""
         missed = self.last_push.get("delivered") is False
-        if self.dry_run or not self.last_sig or not (missed or self.cfg["keep_on_screen"]):
+        if self.dry_run or not config.ready(self.cfg) or not self.last_sig or not (missed or self.cfg["keep_on_screen"]):
             return
         if time.time() - self.last_push_at < 20:  # a frame of ours is still on its way
             return
@@ -346,9 +354,8 @@ async def main() -> None:
 
     cfg = config.load()
     dry_run = bool(os.environ.get("AGENT_BOARD_DRY_RUN"))
-    if not cfg["device_id"] and not dry_run:
-        log.error("device_id is not set in %s", home / "config.json")
-        raise SystemExit(2)
+    if not config.ready(cfg) and not dry_run:
+        log.info("no device yet: waiting for one to be connected in the settings page")
 
     app = App(cfg, dry_run=dry_run)
     app.loop = asyncio.get_running_loop()
