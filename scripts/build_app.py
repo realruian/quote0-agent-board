@@ -85,8 +85,8 @@ def bundle(binary: Path) -> Path:
             "CFBundleShortVersionString": VERSION,
             "CFBundleVersion": VERSION,
             "LSMinimumSystemVersion": "11.0",
-            "LSUIElement": True,  # lives in the menu bar: no Dock icon, no window
             "NSHighResolutionCapable": True,
+            "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True},  # the window shows pages served on 127.0.0.1
             "NSHumanReadableCopyright": "MIT License",
         }, f)
     run("codesign", "--force", "--sign", "-", str(app))

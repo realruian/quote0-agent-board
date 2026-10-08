@@ -1,9 +1,10 @@
-// Agent 状态牌: the Quote/0 agent status board as a menu bar app.
+// Agent 状态牌: the Quote/0 agent status board as a Mac app.
 //
-// The board itself has nothing to look at on the Mac, so the app lives in the menu
-// bar: the icon says whether the board is healthy and how many conversations are
-// waiting, and its menu shows the frame on the screen and each conversation's state.
-// Quitting turns the board off; opening the app turns it on.
+// The app is in the Dock and has one window, which holds the settings. The board
+// itself works in the background, so there is also an icon in the menu bar: it says
+// whether the board is healthy and how many conversations are waiting, and its menu
+// shows the frame on the screen and each conversation's state. Closing the window
+// leaves the board running; quitting the app turns it off.
 
 import AppKit
 import BoardCore
@@ -17,6 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hooks: HookSocket!
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
+    private lazy var settings = SettingsWindow { [weak self] in
+        guard let console = self?.console, console.port != 0 else { return nil }
+        return console.page
+    }
+    private var saidFarewell = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let reason = Install.misplaced() {
@@ -55,13 +61,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.autoenablesItems = false
         statusItem.menu = menu
         // Opened by hand rather than at login: show the settings, since opening an app should show something.
-        if !Install.startedByLaunchd && !Paths.isDevelopment { openSettings() }
+        NSApp.mainMenu = mainMenu()
+        // Opened by hand rather than at login: show the window, as opening an app should.
+        let snapshot = Paths.isDevelopment && environment["AGENT_BOARD_SNAPSHOT"] != nil
+        if (!Install.startedByLaunchd && !Paths.isDevelopment) || snapshot { openSettings() }
         draw()
     }
 
+    /// A click on the Dock icon.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         openSettings()
-        return false
+        return true
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Quitting from the menu, the Dock or at logout all pass through here. The screen keeps
+    /// its last frame once nothing updates it, so it is told the board is off first.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if saidFarewell { return .terminateNow }
+        saidFarewell = true
+        statusItem.button?.appearsDisabled = true
+        DispatchQueue.global().async { [self] in
+            engine.sayFarewell()
+            hooks.stop()
+            Log.info("stopped")
+            Log.flush()
+            DispatchQueue.main.async { NSApp.reply(toApplicationShouldTerminate: true) }
+        }
+        return .terminateLater
+    }
+
+    /// What a Mac app has along the top of the screen. Copy and paste live here: without
+    /// them an API key could not be pasted into the window.
+    private func mainMenu() -> NSMenu {
+        func item(_ title: String, _ action: Selector?, _ key: String = "", target: AnyObject? = nil) -> NSMenuItem {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.target = target
+            return item
+        }
+        func menu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
+            let holder = NSMenuItem()
+            holder.submenu = NSMenu(title: title)
+            items.forEach { holder.submenu?.addItem($0) }
+            return holder
+        }
+        let bar = NSMenu()
+        bar.addItem(menu("Agent 状态牌", [
+            item("设置…", #selector(openSettings), ",", target: self), .separator(),
+            item("隐藏 Agent 状态牌", #selector(NSApplication.hide(_:)), "h"), .separator(),
+            item("退出 Agent 状态牌", #selector(NSApplication.terminate(_:)), "q"),
+        ]))
+        bar.addItem(menu("编辑", [
+            item("撤销", Selector(("undo:")), "z"), item("重做", Selector(("redo:")), "Z"), .separator(),
+            item("剪切", #selector(NSText.cut(_:)), "x"), item("拷贝", #selector(NSText.copy(_:)), "c"),
+            item("粘贴", #selector(NSText.paste(_:)), "v"), item("全选", #selector(NSText.selectAll(_:)), "a"),
+        ]))
+        let window = menu("窗口", [item("最小化", #selector(NSWindow.performMiniaturize(_:)), "m"), item("关闭", #selector(NSWindow.performClose(_:)), "w")])
+        bar.addItem(window)
+        NSApp.windowsMenu = window.submenu
+        return bar
     }
 
     @discardableResult
@@ -170,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if now.sessions.count > maxMenuRows { add("还有 \(now.sessions.count - maxMenuRows) 个") }
         menu.addItem(.separator())
 
-        add(now.needsSetup ? "连接设备…" : "打开设置…", console.port == 0 ? nil : #selector(openSettings), key: ",")
+        add(now.needsSetup ? "连接设备…" : "打开设置…", console.port == 0 ? nil : #selector(openSettings))
         if console.port == 0 { add("设置页打不开：端口 \(engine.settings.webPort) 被别的程序占用") }
         if !now.needsSetup {
             add("刷新屏幕", #selector(refreshScreen))
@@ -234,9 +293,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Until a device is connected the settings have nothing to show, so they open on connecting one.
     @objc private func openSettings() {
-        guard console.port != 0 else { return }
         let needsSetup = engine.locked { !engine.dryRun && !engine.settings.ready }
-        if let page = URL(string: "\(console.page)/#\(needsSetup ? "setup" : "")") { NSWorkspace.shared.open(page) }
+        settings.show(needsSetup ? "setup" : "")
     }
 
     @objc private func refreshScreen() {
@@ -249,20 +307,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func quit() {
-        statusItem.button?.appearsDisabled = true
-        DispatchQueue.global().async { [self] in
-            engine.sayFarewell()  // the screen keeps its last frame once nothing updates it, so it says goodbye first
-            hooks.stop()
-            Log.info("stopped")
-            Log.flush()
-            exit(0)
-        }
+        NSApp.terminate(nil)
     }
 
     @objc private func uninstall() {
         let text = "会断开 Claude Code 和 Codex、取消开机自启，并把设备的循环间隔恢复原样。设置和日志会保留。"
         guard alert("卸载 Agent 状态牌？", text, buttons: ["卸载", "取消"]) == 0 else { return }
         statusItem.button?.appearsDisabled = true
+        saidFarewell = true
         DispatchQueue.global().async { [self] in
             engine.sayFarewell()
             hooks.stop()
@@ -278,5 +330,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
 let delegate = AppDelegate()
 NSApplication.shared.delegate = delegate
-NSApplication.shared.setActivationPolicy(.accessory)
+// In the Dock like any app. A development copy taking a picture of its own page stays out of it.
+NSApplication.shared.setActivationPolicy(ProcessInfo.processInfo.environment["AGENT_BOARD_SNAPSHOT"] == nil ? .regular : .accessory)
 NSApplication.shared.run()

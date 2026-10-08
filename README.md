@@ -88,7 +88,7 @@ flowchart TB
 
 ## Swift 版 App（这个分支上的试验）
 
-这个分支把后台进程用 Swift 重写了一遍，和菜单栏图标合成了一个 App，不再需要 Python。设置页原样沿用，配置文件和钩子与 Python 版通用，两个版本可以来回切换。
+这个分支把后台进程用 Swift 重写了一遍，做成了一个普通的 Mac App：程序坞里有图标，设置在它自己的窗口里，菜单栏上有一个显示状态的小图标，不再需要 Python。设置页的内容原样沿用，配置文件和钩子与 Python 版通用，两个版本可以来回切换。
 
 ```bash
 python3 scripts/build_app.py
@@ -304,7 +304,7 @@ AGENT_BOARD_HOME="$PWD/.dev-home" AGENT_BOARD_DRY_RUN=1 AGENT_BOARD_PORT=8766 py
 
 - 功能设计参考了 [Vibe Island](https://vibeisland.app)。
 - 随项目附带的像素字体是 [方舟像素字体](https://github.com/TakWolf/ark-pixel-font)，按 SIL OFL 1.1 许可分发，许可全文在 `agent_board/fonts/ark-pixel-OFL.txt`。
-- 这是个人项目，和 MindReset、Anthropic、OpenAI、Vibe Island 都没有关联。屏幕上的 Agent 图标只用来标识对应的产品，相关名称和标志归各自的所有者。
+- 这是个人项目，和 MindReset、Anthropic、OpenAI、Vibe Island 都没有关联。屏幕上的 Agent 图标只用来标识对应的产品，App 图标里的锯齿圆形取自 Dot. App 的图标，表示它运行在 Dot. 的设备上；相关名称和标志归各自的所有者。
 
 ## 许可证
 

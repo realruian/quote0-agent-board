@@ -91,7 +91,7 @@ flowchart TB
 
 ## The Swift app (an experiment on this branch)
 
-This branch rewrites the daemon in Swift and merges it with the menu bar icon into one app, so Python is no longer needed. The settings page is reused as it is, and the configuration file and hooks are shared with the Python version, so you can switch between the two.
+This branch rewrites the daemon in Swift as an ordinary Mac app: it has a Dock icon, its settings are in a window of its own, a small icon in the menu bar shows the state, and Python is no longer needed. The settings pages themselves are reused as they are, and the configuration file and hooks are shared with the Python version, so you can switch between the two.
 
 ```bash
 python3 scripts/build_app.py
@@ -307,7 +307,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for more, and [CHANGELOG.md](CHANGELOG.md
 
 - The feature design is modelled on [Vibe Island](https://vibeisland.app).
 - The bundled pixel font is [Ark Pixel Font](https://github.com/TakWolf/ark-pixel-font), distributed under the SIL OFL 1.1. The full license is in `agent_board/fonts/ark-pixel-OFL.txt`.
-- This is a personal project with no affiliation to MindReset, Anthropic, OpenAI or Vibe Island. The agent icons on the screen are used only to identify the corresponding products; the names and logos belong to their respective owners.
+- This is a personal project with no affiliation to MindReset, Anthropic, OpenAI or Vibe Island. The agent icons on the screen are used only to identify the corresponding products, and the saw-edged disc in the app icon is taken from the Dot. app's icon to say that the board runs on a Dot. device; the names and logos belong to their respective owners.
 
 ## License
 
