@@ -205,6 +205,34 @@ class ConsoleTest(unittest.TestCase):
             self.assertEqual(self.request("POST", "/api/device", {"keep": "yes"})[0], 400)
         self.assertEqual(sent, [{"interval": {"powerMs": 43_200_000}}, {"interval": {"powerMs": 300_000}}])
 
+    def test_menu_bar_app_is_told_where_the_console_is(self):
+        where = config.console_path()
+        self.assertEqual(json.loads(where.read_text()), {"port": self.port, "token": self.server.token})
+        self.assertEqual(where.stat().st_mode & 0o777, 0o600)
+
+    def test_pausing_holds_the_screen_on_a_notice(self):
+        self.assertFalse(json.loads(self.request("GET", "/api/overview")[2])["paused"])
+        self.assertEqual(self.request("POST", "/api/settings", {"paused": True})[0], 200)
+        try:
+            self.assertTrue(json.loads(self.request("GET", "/api/overview")[2])["paused"])
+            self.app.call(self.app.on_event, "claude", "UserPromptSubmit", {"session_id": "p", "cwd": "/p/paused"})
+            view = self.app.call(self.app.current_view)
+            self.assertEqual((view["kind"], view["line"]), ("quiet", "已暂停"))
+        finally:
+            self.request("POST", "/api/settings", {"paused": False})
+        self.assertEqual(self.app.call(self.app.current_view)["kind"], "list")
+        self.assertEqual(self.request("POST", "/api/settings", {"paused": "yes"})[0], 400)
+
+    def test_quitting_leaves_a_farewell_on_the_screen(self):
+        self.app.last_push = {"at": 1.0}
+        with mock.patch.object(web, "FAREWELL_WAIT", 0.3):
+            self.assertEqual(self.request("POST", "/api/farewell", {})[0], 200)
+        try:
+            view = self.app.call(self.app.current_view)
+            self.assertEqual((view["kind"], view["line"]), ("quiet", "已退出"))
+        finally:
+            self.app.farewell_until = 0.0
+
     def test_overview_lists_sessions(self):
         self.app.call(self.app.on_event, "claude", "UserPromptSubmit", {"session_id": "s", "cwd": "/p/alpha"})
         data = json.loads(self.request("GET", "/api/overview")[2])

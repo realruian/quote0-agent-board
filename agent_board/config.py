@@ -22,6 +22,8 @@ DEFAULTS = {
     # When the device shows other loop content (its loop moved on, or the list was
     # edited in the Dot app), put the board back.
     "keep_on_screen": True,
+    # Set from the menu bar: the screen says so and stays as it is until this is cleared.
+    "paused": False,
     "font": "pingfang",  # falls back to a system font when not installed
     "max_rows": 4,
     "idle_show_last": True,
@@ -38,7 +40,7 @@ DEFAULTS = {
 # What the web console may change. The rest identifies the device and needs a restart.
 FONT_CHOICES = ("pingfang", "misans", "hiragino", "arkpixel")
 
-EDITABLE = ("font", "keep_on_screen", "show_titles", "show_detail", "show_usage", "max_rows", "idle_show_last", "aliases", "hidden_projects", "done_ttl_minutes",
+EDITABLE = ("font", "keep_on_screen", "paused", "show_titles", "show_detail", "show_usage", "max_rows", "idle_show_last", "aliases", "hidden_projects", "done_ttl_minutes",
             "takeover", "quiet_hours", "min_push_interval_seconds", "stale_running_minutes")
 
 _HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
@@ -50,6 +52,10 @@ def home() -> Path:
 
 def socket_path() -> Path:
     return home() / "run" / "board.sock"
+
+
+def console_path() -> Path:
+    return home() / "run" / "console.json"
 
 
 def _stored() -> dict:
@@ -108,7 +114,7 @@ def validate(patch: dict) -> dict:
     for key, value in patch.items():
         if key not in EDITABLE:
             raise ValueError(f"不能在这里修改 {key}")
-        if key in ("keep_on_screen", "show_titles", "show_detail", "show_usage", "idle_show_last"):
+        if key in ("keep_on_screen", "paused", "show_titles", "show_detail", "show_usage", "idle_show_last"):
             clean[key] = _flag(value, key)
         elif key == "font":
             if value not in FONT_CHOICES:

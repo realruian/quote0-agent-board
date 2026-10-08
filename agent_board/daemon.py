@@ -23,6 +23,7 @@ COALESCE_SECONDS = 2.0
 URGENT_SECONDS = 0.4
 RETRY_SECONDS = (15, 60, 300)
 TEST_FRAME_SECONDS = 15
+FAREWELL_SECONDS = 30
 NAME_EVENTS = ("SessionStart", "UserPromptSubmit", "Stop")
 
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{1,32}")
@@ -79,6 +80,7 @@ class App:
         self.last_push_at = 0.0
         self.last_push: dict = {}
         self.test_until = 0.0
+        self.farewell_until = 0.0
         self.usage: dict | None = None  # quota readings, refreshed by the ticker
         self._seen_events: set[tuple[str, str]] = set()
         self.names_due = asyncio.Event()
@@ -165,6 +167,10 @@ class App:
         now = time.time() if now is None else now
         if now < self.test_until:
             return {"kind": "test", "font": self.cfg["font"], "note": f"{time.strftime('%H:%M:%S', time.localtime(self.test_until - TEST_FRAME_SECONDS))} 发送"}
+        if now < self.farewell_until:
+            return {"kind": "quiet", "font": self.cfg["font"], "summary": "", "line": "已退出", "last": "打开 Agent 状态牌恢复"}
+        if self.cfg["paused"]:
+            return {"kind": "quiet", "font": self.cfg["font"], "summary": "", "line": "已暂停", "last": "在菜单栏里恢复"}
         if in_quiet_hours(self.cfg, now):
             return {"kind": "quiet", "font": self.cfg["font"], "summary": "", "line": "夜间免打扰",
                     "last": f"{self.cfg['quiet_hours']['end']} 恢复"}
@@ -175,6 +181,8 @@ class App:
         config.save(clean)
         self.cfg = config.load()
         self._apply_timeouts()
+        if "paused" in clean:  # asked for by hand: do not make it wait its turn
+            self.urgent.set()
         self.dirty.set()
         log.info("settings changed: %s", ", ".join(sorted(clean)))
         return self.cfg
@@ -189,6 +197,15 @@ class App:
         self.urgent.set()
         self.dirty.set()
         self.loop.call_later(TEST_FRAME_SECONDS + 0.5, self.force_refresh)
+
+    def show_farewell(self) -> None:
+        """The menu bar app is about to stop this process. The screen keeps its last
+        frame once nothing updates it, so that frame should say the board is off.
+        Should the process not be stopped after all, the board comes back by itself."""
+        self.farewell_until = time.time() + FAREWELL_SECONDS
+        self.urgent.set()
+        self.dirty.set()
+        self.loop.call_later(FAREWELL_SECONDS + 0.5, self.force_refresh)
 
     # -- pushing --------------------------------------------------------
 
@@ -357,6 +374,7 @@ async def main() -> None:
         console.shutdown()
     server.close()
     sock.unlink(missing_ok=True)
+    config.console_path().unlink(missing_ok=True)
     log.info("stopped")
 
 

@@ -33,6 +33,7 @@ The feature set is modelled on [Vibe Island](https://vibeisland.app) for the Mac
 - **Remaining quota**: percentage left and reset time for the 5-hour and weekly windows.
 - **Refreshing designed for e-ink**: the screen only refreshes when something changed, and changes close together are merged, so it does not keep flashing.
 - **Local settings page**: choose the font, the alerts and quiet hours in your browser, with a live preview.
+- **Menu bar icon**: shows whether the board is healthy and how many conversations are waiting for you; its menu shows the frame on the screen and lets you pause or quit.
 - **Stays out of the agent's way**: the hook returns in about 12 ms and cannot fail the agent. It sits next to other tools' hooks and leaves them untouched.
 - **Clean uninstall**: every file it edits is backed up first, and one command puts everything back.
 
@@ -81,6 +82,7 @@ flowchart TB
     C -- "1-bit image" --> D["MindReset<br>Image API"]
     D --> E["Quote/0"]
     F["settings page"] <--> C
+    G["menu bar icon"] <--> C
 ```
 
 - **Hook** (`bin/agent-board-hook`): a shell script that forwards the first 4 KB of each event to the daemon and exits at once.
@@ -92,6 +94,7 @@ flowchart TB
 - macOS. The daemon is managed by launchd, and text is drawn with the system's Chinese fonts.
 - Python 3.9 or newer, with Pillow 9.0 or newer.
 - A Quote/0 that is online and plugged in.
+- For the menu bar icon, Apple's command line tools (`xcode-select --install`), because it is compiled on your machine during installation. Without them the installer skips it and everything else still works.
 - Claude Code or Codex, or both. The desktop apps and the command-line tools both work; they share the same hook configuration.
 
 ## Installation
@@ -134,12 +137,32 @@ The installer does the following, backing up every file it edits to `~/.quote0-a
 3. Appends 9 hooks to `~/.claude/settings.json`.
 4. Appends 7 hooks to `~/.codex/hooks.json`. Codex will ask you to trust them the next time it starts. Pass `--no-codex` to skip.
 5. Raises the device's loop interval on power to 12 hours, so the board is replaced less often. Pass `--no-hold` to skip.
+6. Compiles the menu bar app into `~/Applications/Agent 状态牌.app` and has it open at login (LaunchAgent `com.quote0.agent-board.menubar`). Pass `--no-menubar` to skip.
 
 Hooks only apply to conversations started after installation.
 
+## Menu bar icon
+
+After installation there is a new icon in the menu bar. It is an ordinary app too: search for "Agent 状态牌" in Launchpad or Spotlight.
+
+| Icon | Meaning |
+|---|---|
+| List | All is well |
+| Filled list with a number | That many conversations are waiting for you |
+| Pause | Paused |
+| Moon | The device is asleep or offline, and the latest frame is not on the screen yet |
+| Warning triangle | The last refresh failed, or the daemon is not answering |
+
+The menu shows the frame on the screen and the state of each conversation, and offers:
+
+- **打开设置… (Open settings)**: opens the settings page in your browser. Opening the app again does the same.
+- **刷新屏幕 (Refresh screen)**: sends the current frame again right away.
+- **暂停 / 恢复 (Pause / Resume)**: while paused the screen reads "已暂停" and stays as it is until you resume.
+- **退出 (Quit)**: the screen reads "已退出", and the daemon stops together with the icon. Opening the app again, or logging in the next time, brings both back.
+
 ## Settings page
 
-Once installed, open <http://127.0.0.1:8765> in your browser.
+Once installed, choose "打开设置…" from the menu bar icon, or open <http://127.0.0.1:8765> in your browser.
 
 <img src="docs/images/settings.png" width="735" alt="The settings console">
 
@@ -190,7 +213,7 @@ Every e-ink refresh flashes the whole screen for about two seconds, so refreshes
 - **The rendered frame is all the project sends out.** Reading Claude quota has the `claude` command line contact Anthropic itself; the project never handles its sign-in. The frame is a 296×152 black-and-white image that travels through MindReset's servers to the device. It shows conversation names, agent icons, states, durations and quota percentages. If you would rather not send conversation names through a server, turn off "显示对话名称" (show conversation names) on the settings page; the screen then shows project folder names only.
 - **Hooks hand data to the local daemon only.** What they forward is the first 4 KB of the event: the conversation ID, working directory, tool name and the start of your prompt. No file contents and no tool output.
 - **The API key is read from `~/.dot_api_key` only** and never appears in the configuration file, the log or the settings page.
-- **The settings page listens on the loopback address only**, so other devices cannot reach it. Requests must carry the page's own one-time token, and requests that change something are also checked for their origin, so other websites you visit cannot call it.
+- **The settings page listens on the loopback address only**, so other devices cannot reach it. Requests must carry the page's own one-time token, and requests that change something are also checked for their origin, so other websites you visit cannot call it. The menu bar app reads that token from `~/.quote0-agent-board/run/console.json`, a file only you can read.
 
 To report a security issue, see [SECURITY.md](SECURITY.md).
 
@@ -209,7 +232,7 @@ Uninstall:
 python3 install.py --uninstall
 ```
 
-Uninstalling removes the hooks and the daemon and restores the device's loop interval. Add `--purge` to delete `~/.quote0-agent-board/` as well.
+Uninstalling removes the hooks, the daemon and the menu bar app, and restores the device's loop interval. Add `--purge` to delete `~/.quote0-agent-board/` as well.
 
 ## Command line and file locations
 
@@ -228,6 +251,8 @@ python3 -m agent_board.cli status
 | `~/.quote0-agent-board/last-frame.png` | The most recently pushed frame |
 | `~/.quote0-agent-board/backups/` | Backups of files edited by the installer or the settings page |
 | `~/Library/LaunchAgents/com.quote0.agent-board.plist` | The daemon's launchd registration |
+| `~/Applications/Agent 状态牌.app` | The menu bar app |
+| `~/Library/LaunchAgents/com.quote0.agent-board.menubar.plist` | The registration that opens the menu bar app at login |
 
 ## Known limitations
 

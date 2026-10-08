@@ -4,6 +4,9 @@ Nothing here is reachable from other machines. Requests must name this host
 (blocks DNS rebinding), carry the per-run token the page was served with, and,
 when they change something, come from this origin (blocks other sites' pages).
 The device API key is never sent to the browser.
+
+The menu bar app is not a page, so it reads the port and the token from a file
+in the board's own directory, which only this user can open.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ MAX_INTERVAL_MINUTES = HOLD_INTERVAL_MS // 60000  # and its minimum is one minut
 DEFAULT_INTERVAL_MS = 5 * 60 * 1000
 MAX_BODY = 65536
 LOG_TAIL_BYTES = 48_000
+FAREWELL_WAIT = 8
 
 
 class Problem(Exception):
@@ -58,7 +62,7 @@ def overview(app) -> dict:
         return {
             "version": __version__, "dry_run": app.dry_run, "started_at": app.started_at, "now": now,
             "view_kind": app.current_view(now)["kind"], "sessions": sessions, "last_push": app.last_push,
-            "usage": app.usage or {}, "show_usage": app.cfg["show_usage"],
+            "usage": app.usage or {}, "show_usage": app.cfg["show_usage"], "paused": app.cfg["paused"],
         }
     return app.call(read)
 
@@ -321,11 +325,21 @@ def restart(app, body: dict) -> dict:
     return {"ok": True}
 
 
+def farewell(app, body: dict) -> dict:
+    """Put the farewell frame on the screen, and answer once it has been sent or has failed."""
+    before = app.last_push.get("at")
+    app.call(app.show_farewell)
+    deadline = time.time() + FAREWELL_WAIT
+    while app.last_push.get("at") == before and time.time() < deadline:
+        time.sleep(0.1)
+    return {"ok": True}
+
+
 GET_JSON = {"/api/overview": overview, "/api/settings": settings, "/api/device": device,
             "/api/integrations": integrations, "/api/log": log_tail, "/api/about": about}
 POST_JSON = {"/api/settings": save_settings, "/api/device": save_device, "/api/integrations": save_integration,
              "/api/check": lambda app, body: run_checks(app), "/api/refresh": refresh,
-             "/api/test-frame": test_frame, "/api/restart": restart}
+             "/api/test-frame": test_frame, "/api/restart": restart, "/api/farewell": farewell}
 
 
 # -- HTTP plumbing ----------------------------------------------------------
@@ -439,6 +453,10 @@ def start(app, port: int) -> BoardHTTPServer | None:
         return None
     server.app, server.token, server.port = app, secrets.token_urlsafe(24), server.server_address[1]
     app.web_port = server.port
+    where = config.console_path()
+    where.parent.mkdir(parents=True, exist_ok=True)
+    with open(os.open(where, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+        json.dump({"port": server.port, "token": server.token}, f)
     threading.Thread(target=server.serve_forever, name="web", daemon=True).start()
     log.info("settings page at http://127.0.0.1:%s", server.port)
     return server

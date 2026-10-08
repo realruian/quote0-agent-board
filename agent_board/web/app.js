@@ -267,6 +267,17 @@ async function overviewPage(mount, onLeave) {
       `设备：${[s.current, s.battery].filter(Boolean).join(" · ")}，用电池时每 ${d.battery_minutes} 分钟刷新一次 `, link("更改", "refresh/battery"));
   }).catch((error) => deviceLine.replaceChildren(dot("bad"), `连不上设备：${error.message}`));
 
+  async function resume(event) {
+    event.preventDefault();
+    try {
+      await api("/api/settings", { paused: false });
+      toast("已恢复");
+      tick();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
   async function tick() {
     let data;
     try {
@@ -293,7 +304,8 @@ async function overviewPage(mount, onLeave) {
     const notes = [
       push.at && !push.ok && h("div", null, dot("bad"), `最近一次刷新失败：${push.message}`),
       missed && h("div", null, dot("warn"), "最新画面还没显示：设备休眠或离线"),
-      quiet && h("div", null, dot("warn"), "夜间免打扰中，屏幕暂不刷新"),
+      data.paused && h("div", null, dot("warn"), "已暂停，屏幕不再更新 ", h("a", { href: "#overview", onclick: resume }, "恢复")),
+      quiet && !data.paused && h("div", null, dot("warn"), "夜间免打扰中，屏幕暂不刷新"),
     ].filter(Boolean);
     if (!notes.length && !data.dry_run) notes.push(h("div", null, dot(push.at ? "ok" : ""), push.at ? "屏幕已是最新" : "还没有刷新过屏幕"));
     lines.replaceChildren(...notes);
