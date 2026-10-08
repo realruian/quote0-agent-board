@@ -208,6 +208,17 @@ public final class Board {
                                     state: state.rawValue)
     }
 
+    /// The user stopped the turn at `at`, which no hook event reports. False when the
+    /// session has moved on since: a new turn, or a wait that began later.
+    @discardableResult
+    public func interrupt(_ key: String, at: Double) -> Bool {
+        guard var s = sessions[key], s.state == .running || s.state == .waiting, at > s.since else { return false }
+        finish(&s, .done, at)
+        s.updatedAt = at
+        sessions[key] = s
+        return true
+    }
+
     // MARK: views
 
     /// Sessions worth showing, most urgent first; within a state, the newest first.

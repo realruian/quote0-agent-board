@@ -46,4 +46,11 @@ class BoardTestCase: XCTestCase {
     }
 }
 
+/// A moment the way both agents stamp their records.
+func stamp(_ at: Double) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.string(from: Date(timeIntervalSince1970: at))
+}
+
 func states(_ board: Board, _ now: Double) -> [String] { board.visible(now).map { "\($0.project) \($0.state.rawValue)" } }

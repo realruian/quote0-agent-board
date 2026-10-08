@@ -133,6 +133,45 @@ final class ReviewerTests: BoardTestCase {
     }
 }
 
+final class InterruptedTests: BoardTestCase {
+    private func claudeStop(_ at: Double, _ text: String = "[Request interrupted by user]", sidechain: Bool = false) -> String {
+        #"{"type":"user","isSidechain":\#(sidechain),"message":{"role":"user","content":[{"type":"text","text":"\#(text)"}]},"timestamp":"\#(stamp(at))"}"#
+    }
+
+    func testFindsTheLatestInterruptionInEitherAgentsRecord() {
+        let claude = write([
+            claudeStop(1000),
+            claudeStop(2000, "[Request interrupted by user for tool use]"),
+            claudeStop(3000, sidechain: true),  // a subagent's, not the conversation's
+            // what a tool printed, and what the user typed about it
+            #"{"type":"user","message":{"content":[{"type":"tool_result","content":"[Request interrupted by user]"}]},"timestamp":"\#(stamp(4000))"}"#,
+            claudeStop(5000, "why does it say [Request interrupted by user]?"),
+            "not json [Request interrupted by user]",
+        ].joined(separator: "\n") + "\n", "claude.jsonl").path
+        XCTAssertEqual(Interrupted.at(source: "claude", transcript: claude), 2000)
+        let codex = write([
+            #"{"timestamp":"\#(stamp(1000))","type":"event_msg","payload":{"type":"turn_aborted","turn_id":"t1","reason":"interrupted"}}"#,
+            #"{"timestamp":"\#(stamp(2000))","type":"response_item","payload":{"output":"{\"type\":\"turn_aborted\"}"}}"#,
+        ].joined(separator: "\n") + "\n", "codex.jsonl").path
+        XCTAssertEqual(Interrupted.at(source: "codex", transcript: codex), 1000)
+        XCTAssertEqual(Interrupted.at(source: "claude", transcript: codex), 0)
+        XCTAssertEqual(Interrupted.at(source: "codex", transcript: home.appendingPathComponent("missing.jsonl").path), 0)
+    }
+
+    func testAnInterruptedTurnStopsRunningOnTheBoard() {
+        let engine = Engine(dryRun: true)
+        let path = write(claudeStop(Date().timeIntervalSince1970 - 60) + "\n", "session.jsonl")
+        engine.onEvent("claude", "UserPromptSubmit", alpha.with(["transcript_path": .string(path.path)]))
+        engine.onEvent("claude", "PermissionRequest", beta.with(["transcript_path": .string(path.path)]))
+        engine.checkInterrupted()  // the record's interruption is from before this turn
+        XCTAssertEqual(engine.board.visible().map(\.state), [.waiting, .running])
+        _ = write(claudeStop(Date().timeIntervalSince1970 + 1) + "\n", "session.jsonl")
+        engine.checkInterrupted()
+        XCTAssertEqual(engine.board.visible().map(\.state), [.done, .done])
+        XCTAssertEqual(engine.board.lastFinished?.state, "done")
+    }
+}
+
 final class NamesTests: BoardTestCase {
     func testLatestTitleRecordWins() {
         let path = write([
@@ -191,7 +230,24 @@ final class UsageTests: BoardTestCase {
         XCTAssertEqual(reading.windows, [fiveHour: QuotaUsed(used: 4, resetsAt: 222), sevenDay: QuotaUsed(used: 12.5, resetsAt: 333)])
         XCTAssertEqual(reading.observedAt, 1_791_466_227.413, accuracy: 0.01)
         UsageReader.codexSessions = home.appendingPathComponent("nowhere")
+        XCTAssertEqual(UsageReader.readCodex(), reading)  // kept until a later one turns up
+        UsageReader.forgetCodex()
         XCTAssertNil(UsageReader.readCodex())
+    }
+
+    func testCodexLooksThroughTheLastDaysAndTheConversationsNowOpen() throws {
+        func week(_ used: Int) -> String { #"{"used_percent": \#(used), "window_minutes": 10080, "resets_at": 5}"# }
+        // A conversation begun long ago, and the one written to last.
+        let resumed = write(codexLine("2026-10-08T15:00:00Z", week(80)) + "\n", "sessions/2025/01/02/rollout-resumed.jsonl")
+        for day in 1...UsageReader.codexDays {
+            let path = write(codexLine("2026-10-0\(day)T12:00:00Z", week(day)) + "\n", "sessions/2026/10/0\(day)/rollout-\(day).jsonl").path
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000_000_000 + Double(day))], ofItemAtPath: path)
+        }
+        _ = write("not a day folder", "sessions/2026/10/notes.txt")
+        UsageReader.codexSessions = home.appendingPathComponent("sessions")
+        XCTAssertEqual(UsageReader.readCodex()?.windows[sevenDay]?.used, 7)
+        XCTAssertEqual(UsageReader.readCodex(also: [resumed.path])?.windows[sevenDay]?.used, 80)
+        XCTAssertEqual(UsageReader.readCodex()?.windows[sevenDay]?.used, 80)  // once it is off the board, the earlier readings do not come back
     }
 
     func testClaudeReadsBothWindowsWithTheResetOnTheMinuteAndAsksOnlyNowAndThen() throws {
@@ -230,26 +286,9 @@ final class UsageTests: BoardTestCase {
         """, "claude")
         let silent = write("#!/bin/sh\nexec sleep 30\n", "silent")
         for script in [fake, silent] { try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path) }
-        XCTAssertEqual(UsageReader.readCodex(), reading)  // kept until a later one turns up
-        UsageReader.forgetCodex()
         XCTAssertEqual(UsageReader.askClaude(fake.path), ["rate_limits": ["five_hour": ["utilization": 5]]])
         XCTAssertNil(UsageReader.askClaude(silent.path, timeout: 0.3))
     }
-    func testCodexLooksThroughTheLastDaysAndTheConversationsNowOpen() throws {
-        func week(_ used: Int) -> String { #"{"used_percent": \#(used), "window_minutes": 10080, "resets_at": 5}"# }
-        // A conversation begun long ago, and the one written to last.
-        let resumed = write(codexLine("2026-10-08T15:00:00Z", week(80)) + "\n", "sessions/2025/01/02/rollout-resumed.jsonl")
-        for day in 1...UsageReader.codexDays {
-            let path = write(codexLine("2026-10-0\(day)T12:00:00Z", week(day)) + "\n", "sessions/2026/10/0\(day)/rollout-\(day).jsonl").path
-            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000_000_000 + Double(day))], ofItemAtPath: path)
-        }
-        _ = write("not a day folder", "sessions/2026/10/notes.txt")
-        UsageReader.codexSessions = home.appendingPathComponent("sessions")
-        XCTAssertEqual(UsageReader.readCodex()?.windows[sevenDay]?.used, 7)
-        XCTAssertEqual(UsageReader.readCodex(also: [resumed.path])?.windows[sevenDay]?.used, 80)
-        XCTAssertEqual(UsageReader.readCodex()?.windows[sevenDay]?.used, 80)  // once it is off the board, the earlier readings do not come back
-    }
-
 
     func testTrustRules() {
         func reading(_ age: Double, _ resetIn: Double) -> QuotaReading {

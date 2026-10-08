@@ -355,8 +355,30 @@ public final class Engine {
         }
     }
 
+    /// Esc sends no event: a turn the user stopped is found in the agent's own record of the conversation.
+    func checkInterrupted() {
+        let open = locked {
+            board.sessions.values.filter { $0.state == .running || $0.state == .waiting }.map { ($0.key, $0.source, $0.transcript) }
+        }
+        let found = open.map { ($0.0, Interrupted.at(source: $0.1, transcript: $0.2)) }.filter { $0.1 > 0 }
+        let changed: Bool = locked {
+            var changed = false
+            for (key, at) in found where board.interrupt(key, at: at) {
+                Log.info("\(key.prefix { $0 != ":" }) turn was interrupted (found in its session record)")
+                changed = true
+            }
+            if changed { save() }
+            return changed
+        }
+        if changed {
+            raise(dirty: true)
+            onChange?()
+        }
+    }
+
     /// Names appear a little after a conversation starts and can be edited later, so
-    /// look after the events that tend to precede one, and now and then.
+    /// look after the events that tend to precede one, and now and then. The same
+    /// records say when a turn was interrupted, so that is looked for on the same round.
     private func namer() {
         while true {
             wake.lock()
@@ -366,6 +388,7 @@ public final class Engine {
             wake.unlock()
             Thread.sleep(forTimeInterval: 1)  // give the agent a moment to write its record
             refreshNames()
+            checkInterrupted()
         }
     }
 

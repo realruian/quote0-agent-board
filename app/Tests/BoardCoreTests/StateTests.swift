@@ -116,6 +116,21 @@ final class StateTests: BoardTestCase {
         XCTAssertEqual(taskTitle("# 标题行\n真正要做的事情写在这里"), "真正要做的事情写在这里")
         for tooLittle in ["继续", "ok", "/compact 然后继续干活", "", nil] { XCTAssertEqual(taskTitle(tooLittle), "") }
     }
+
+    func testAnInterruptionEndsOnlyTheTurnItHappenedIn() {
+        let board = Board()
+        board.apply("claude", "UserPromptSubmit", alpha, now: 100)
+        XCTAssertFalse(board.interrupt("claude:a", at: 90))  // an earlier turn's
+        XCTAssertTrue(board.interrupt("claude:a", at: 160))
+        XCTAssertEqual(states(board, 170), ["alpha done"])
+        XCTAssertEqual(board.sessions["claude:a"]?.finishedAt, 160)
+        XCTAssertFalse(board.interrupt("claude:a", at: 165))  // already over
+        board.apply("claude", "UserPromptSubmit", alpha, now: 200)
+        board.apply("claude", "PermissionRequest", alpha.with(["tool_name": "Bash"]), now: 300)
+        XCTAssertFalse(board.interrupt("claude:a", at: 250))  // the wait began after it
+        XCTAssertTrue(board.interrupt("claude:a", at: 310))
+        XCTAssertFalse(board.interrupt("claude:missing", at: 310))
+    }
 }
 
 final class PayloadTests: XCTestCase {
