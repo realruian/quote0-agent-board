@@ -89,23 +89,43 @@ public enum UsageReader {
         ((try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]) as? Date)?.timeIntervalSince1970 ?? 0
     }
 
-    public static func readCodex() -> QuotaReading? {
-        // sessions/<year>/<month>/<day>/rollout-*.jsonl
+    static let codexDays = 7  // how many of the newest day folders are looked through
+    private static var codexReading: QuotaReading?
+
+    static func forgetCodex() { codexReading = nil }
+
+    /// Codex's limits as its newest session record has them. The folders hold every
+    /// conversation ever had, so only the last few days' are looked through, with the
+    /// records of the conversations now open (`also`), wherever those are. A reading
+    /// is kept until a later one turns up.
+    public static func readCodex(also transcripts: [String] = []) -> QuotaReading? {
+        // sessions/<year>/<month>/<day>/rollout-*.jsonl; the folders' names sort by date
         let manager = FileManager.default
-        func children(_ path: String) -> [String] { ((try? manager.contentsOfDirectory(atPath: path)) ?? []).map { "\(path)/\($0)" } }
-        var files: [String] = []
-        for year in children(codexSessions.path) {
-            for month in children(year) {
-                for day in children(month) {
-                    files += children(day).filter { let name = ($0 as NSString).lastPathComponent
-                        return name.hasPrefix("rollout-") && name.hasSuffix(".jsonl") }
+        func children(_ path: String) -> [String] { ((try? manager.contentsOfDirectory(atPath: path)) ?? []).sorted(by: >) }
+        func dated(_ path: String) -> [String] { children(path).filter { $0.allSatisfy(\.isNumber) }.map { "\(path)/\($0)" } }
+        func isRecord(_ path: String) -> Bool {
+            let name = (path as NSString).lastPathComponent
+            return name.hasPrefix("rollout-") && name.hasSuffix(".jsonl")
+        }
+        var files = Set(transcripts.filter(isRecord))
+        var days = 0
+        search: for year in dated(codexSessions.path) {
+            for month in dated(year) {
+                for day in dated(month) {
+                    let records = children(day).map { "\(day)/\($0)" }.filter(isRecord)
+                    if records.isEmpty { continue }
+                    files.formUnion(records)
+                    days += 1
+                    if days == codexDays { break search }
                 }
             }
         }
-        for path in files.sorted(by: { modified($0) > modified($1) }).prefix(5) {
-            if let reading = (try? codex(from: path)) ?? nil { return reading }
+        for (path, _) in files.map({ ($0, modified($0)) }).sorted(by: { $0.1 > $1.1 }).prefix(5) {
+            guard let reading = (try? codex(from: path)) ?? nil else { continue }
+            if reading.observedAt >= codexReading?.observedAt ?? 0 { codexReading = reading }
+            break
         }
-        return nil
+        return codexReading
     }
 
     // MARK: Claude
@@ -239,8 +259,8 @@ public enum UsageReader {
 
     /// Per agent and window, percent left and reset time. An agent has no windows
     /// when there is no reading worth showing.
-    public static func snapshot(now: Double = Date().timeIntervalSince1970) -> Usage {
-        let claude = readClaude(now: now), codex = readCodex()
+    public static func snapshot(now: Double = Date().timeIntervalSince1970, codexTranscripts: [String] = []) -> Usage {
+        let claude = readClaude(now: now), codex = readCodex(also: codexTranscripts)
         return [
             "claude": AgentUsage(windows: left("claude", claude, now), observedAt: claude?.observedAt ?? 0),
             "codex": AgentUsage(windows: left("codex", codex, now), observedAt: codex?.observedAt ?? 0),

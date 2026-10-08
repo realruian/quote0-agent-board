@@ -230,9 +230,26 @@ final class UsageTests: BoardTestCase {
         """, "claude")
         let silent = write("#!/bin/sh\nexec sleep 30\n", "silent")
         for script in [fake, silent] { try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path) }
+        XCTAssertEqual(UsageReader.readCodex(), reading)  // kept until a later one turns up
+        UsageReader.forgetCodex()
         XCTAssertEqual(UsageReader.askClaude(fake.path), ["rate_limits": ["five_hour": ["utilization": 5]]])
         XCTAssertNil(UsageReader.askClaude(silent.path, timeout: 0.3))
     }
+    func testCodexLooksThroughTheLastDaysAndTheConversationsNowOpen() throws {
+        func week(_ used: Int) -> String { #"{"used_percent": \#(used), "window_minutes": 10080, "resets_at": 5}"# }
+        // A conversation begun long ago, and the one written to last.
+        let resumed = write(codexLine("2026-10-08T15:00:00Z", week(80)) + "\n", "sessions/2025/01/02/rollout-resumed.jsonl")
+        for day in 1...UsageReader.codexDays {
+            let path = write(codexLine("2026-10-0\(day)T12:00:00Z", week(day)) + "\n", "sessions/2026/10/0\(day)/rollout-\(day).jsonl").path
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000_000_000 + Double(day))], ofItemAtPath: path)
+        }
+        _ = write("not a day folder", "sessions/2026/10/notes.txt")
+        UsageReader.codexSessions = home.appendingPathComponent("sessions")
+        XCTAssertEqual(UsageReader.readCodex()?.windows[sevenDay]?.used, 7)
+        XCTAssertEqual(UsageReader.readCodex(also: [resumed.path])?.windows[sevenDay]?.used, 80)
+        XCTAssertEqual(UsageReader.readCodex()?.windows[sevenDay]?.used, 80)  // once it is off the board, the earlier readings do not come back
+    }
+
 
     func testTrustRules() {
         func reading(_ age: Double, _ resetIn: Double) -> QuotaReading {

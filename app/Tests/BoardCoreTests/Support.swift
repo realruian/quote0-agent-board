@@ -30,6 +30,7 @@ class BoardTestCase: XCTestCase {
         _ = write("{\n  \"api_key_file\": \"\(home.path)/dot_api_key\"\n}\n", "config.json")
         Hooks.files = ["claude": home.appendingPathComponent("agents/claude-settings.json"), "codex": home.appendingPathComponent("agents/codex-hooks.json")]
         DotAPI.transport = { _ in throw URLError(.notConnectedToInternet) }
+        UsageReader.forgetCodex()
     }
 
     override func tearDown() {

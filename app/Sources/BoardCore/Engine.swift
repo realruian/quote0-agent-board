@@ -372,7 +372,9 @@ public final class Engine {
     // MARK: the ticker
 
     func readUsage() {
-        let reading = UsageReader.snapshot()
+        // A conversation picked up again after weeks is recorded in the folder of the day it began.
+        let open = locked { board.sessions.values.filter { $0.source == "codex" && !$0.transcript.isEmpty }.map(\.transcript) }
+        let reading = UsageReader.snapshot(codexTranscripts: open)
         locked { usage = reading }
     }
 
