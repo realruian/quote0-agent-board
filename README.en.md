@@ -141,15 +141,16 @@ Hooks only apply to conversations started after installation.
 
 Once installed, open <http://127.0.0.1:8765> in your browser.
 
-<img src="docs/images/settings.png" width="735" alt="The Display page of the settings console">
+<img src="docs/images/settings.png" width="735" alt="The settings console">
 
 | Page | What you can do |
 |---|---|
-| 总览 Overview | See the current frame, the daemon, the device and the active conversations; refresh the screen or send a test frame |
-| 显示 Display | Font, whether to show conversation names and quota, number of rows, how long finished conversations stay, project aliases and hidden projects |
-| 提醒 Alerts | Which situations take over the screen, the minimum refresh interval, quiet hours |
-| 集成 Integrations | Turn the Claude Code and Codex hooks on and off separately |
-| 设备 Device | Signal, power and firmware; device name, whether the board stays on screen, the wake interval on battery, the device's sleep hours |
+| 总览 Overview | See the current frame, whether the screen and the device are fine, quota left and the active conversations; refresh the screen or send a test frame |
+| 画面 Screen | What the screen shows: font, conversation names and quota, number of rows, how long conversations stay, project aliases and hidden projects |
+| 刷新 Refresh | When the screen updates: the minimum interval on power, the refresh interval on battery, whether the board always stays on screen, quiet hours, the device's scheduled sleep |
+| 提醒 Alerts | Which situations take over the screen |
+| Agent | Connect or disconnect Claude Code and Codex separately |
+| 设备 Device | Status, power, signal and firmware; device name |
 | 诊断 Diagnostics | One-click self-check, log viewer, restart the daemon |
 | 关于 About | Version and file locations |
 
@@ -159,16 +160,17 @@ Only fonts present on the machine are offered: PingFang (default), MiSans, Hirag
 
 ## Remaining quota
 
-Quota is read from files already on your machine. The project does not log in to any account and does not read any credentials.
+Quota comes from Codex and Claude Code themselves. The project does not log in to any account and does not read any credentials.
 
 | | Source | Trusted for |
 |---|---|---|
 | Codex | The conversation records Codex writes under `~/.codex/sessions/` | Until the reset time, after which the window counts as full again |
-| Claude | The quota records Vibe Island keeps on the machine | Readings up to 20 minutes old; anything older shows as "—" or "暂无数据" (no data) |
+| Claude | The local `claude` command line, asked every 5 minutes; it queries Anthropic with the sign-in it already has | Readings up to 20 minutes old; anything older shows as "—" or "暂无数据" (no data) |
 
 Two limits:
 
-- **Claude quota needs Vibe Island installed and able to get the data itself.** Without Vibe Island the Claude quota stays empty; everything else works.
+- **Claude quota needs Claude Code signed in from a terminal.** If you only use the desktop app, run `claude auth login` once in a terminal. Without it the Claude quota stays empty; everything else works.
+- **Claude quota is read through an interface Claude Code does not document.** A Claude Code update may break it; that entry then stays empty and everything else works.
 - **Only the windows your plan reports are shown.** If your Codex plan reports a weekly window only, there is no 5-hour entry.
 
 Reset times are fixed moments (a clock time today, or a weekday) rather than countdowns, so they stay true between refreshes.
@@ -185,7 +187,7 @@ Every e-ink refresh flashes the whole screen for about two seconds, so refreshes
 
 ## Privacy and security
 
-- **Only the rendered frame leaves your machine.** It is a 296×152 black-and-white image that travels through MindReset's servers to the device. It shows conversation names, agent icons, states, durations and quota percentages. If you would rather not send conversation names through a server, turn off "显示对话名称" (show conversation names) on the settings page; the screen then shows project folder names only.
+- **The rendered frame is all the project sends out.** Reading Claude quota has the `claude` command line contact Anthropic itself; the project never handles its sign-in. The frame is a 296×152 black-and-white image that travels through MindReset's servers to the device. It shows conversation names, agent icons, states, durations and quota percentages. If you would rather not send conversation names through a server, turn off "显示对话名称" (show conversation names) on the settings page; the screen then shows project folder names only.
 - **Hooks hand data to the local daemon only.** What they forward is the first 4 KB of the event: the conversation ID, working directory, tool name and the start of your prompt. No file contents and no tool output.
 - **The API key is read from `~/.dot_api_key` only** and never appears in the configuration file, the log or the settings page.
 - **The settings page listens on the loopback address only**, so other devices cannot reach it. Requests must carry the page's own one-time token, and requests that change something are also checked for their origin, so other websites you visit cannot call it.
@@ -232,7 +234,7 @@ python3 -m agent_board.cli status
 - **"Waiting for approval" lingers after you approve**: agent hooks have no "user approved" event, so the board only returns to running when that command finishes. Long commands are misreported meanwhile.
 - **Interrupting with Esc still shows running**: an interrupt fires no end event. The row clears when you send the next message, or after 60 minutes.
 - **No full-screen alert for errors or completion**: only approvals, questions and plans take over the screen.
-- **The device must be plugged in**: on battery it sleeps and only updates at the moment of each scheduled wake-up, so the screen stays on the frame from before it slept. The Overview and Device pages of the settings console then say the device is asleep, and so does the `status` command; once the device wakes, the latest frame is sent again automatically.
+- **The device must be plugged in**: on battery it sleeps and only updates at the moment of each scheduled wake-up, so the screen stays on the frame from before it slept. The Overview and Device pages of the settings console then say the device is asleep (the interval can be changed on the Refresh page, one minute at the shortest), and so does the `status` command; once the device wakes, the latest frame is sent again automatically.
 - **Depends on MindReset's cloud service**: when your computer is offline or the service is unavailable, the screen stays on its last frame.
 - **Chinese only**: both the settings page and the text on the screen.
 - **Used long-term on the author's own setup only**: Quote/0 firmware 2.0.8 with the Claude and Codex desktop apps.

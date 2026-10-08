@@ -19,7 +19,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import __version__, config, dot_api, hooks
+from . import __version__, config, dot_api, hooks, usage
 from .render import SAMPLE_USAGE, available_fonts, build_view, render, sample_board, to_png
 
 log = logging.getLogger("agent_board")
@@ -130,9 +130,8 @@ def device(app) -> dict:
         last_render=(status.get("renderInfo") or {}).get("last", ""),
         alias=current.get("alias") or "",
         timezone=current.get("timezone", ""),
-        power_minutes=round(interval.get("powerMs", 0) / 60000),
         battery_minutes=round(interval.get("batteryMs", 0) / 60000),
-        hold=interval.get("powerMs") == HOLD_INTERVAL_MS,
+        keep=interval.get("powerMs") == HOLD_INTERVAL_MS or cfg["keep_on_screen"],
         sleep=current.get("sleep") or {"enabled": False, "start": "23:00", "end": "07:00"},
         image_slot="IMAGE_API" in slots,
     )
@@ -147,15 +146,22 @@ def save_device(app, body: dict) -> dict:
         if not isinstance(alias, str) or len(alias) > 100:
             raise Problem("设备名称最长 100 个字")
         change["alias"] = alias.strip() or None
-    if "hold" in body:
-        if not isinstance(body["hold"], bool):
-            raise Problem("常显设置需要是开或关")
+    if "keep" in body:
+        # One switch for both halves of keeping the board up: the device stops rotating
+        # to other loop content on power, and the daemon puts the board back if it is replaced.
+        if not isinstance(body["keep"], bool):
+            raise Problem("“始终显示状态牌”需要是开或关")
         backup = _device_backup()
-        if body["hold"]:
+        try:
+            interval = dot_api.get_settings(cfg).get("interval") or {}
+        except Exception as e:
+            raise Problem(f"设备设置没有保存：{e}", 502) from None
+        held = interval.get("powerMs") == HOLD_INTERVAL_MS
+        if body["keep"] and not held:
             if not backup.exists():
-                backup.write_text(json.dumps(dot_api.get_settings(cfg).get("interval") or {}))
+                backup.write_text(json.dumps(interval))
             change["interval"] = {"powerMs": HOLD_INTERVAL_MS}
-        else:
+        elif not body["keep"] and held:
             saved = json.loads(backup.read_text()) if backup.exists() else {}
             previous = saved.get("powerMs")
             if not previous or previous == HOLD_INTERVAL_MS:
@@ -164,23 +170,26 @@ def save_device(app, body: dict) -> dict:
     if "battery_minutes" in body:
         minutes = body["battery_minutes"]
         if isinstance(minutes, bool) or not isinstance(minutes, int) or not 1 <= minutes <= MAX_INTERVAL_MINUTES:
-            raise Problem(f"电池唤醒间隔需要是 1 到 {MAX_INTERVAL_MINUTES} 之间的整数分钟")
+            raise Problem(f"用电池时的刷新间隔需要是 1 到 {MAX_INTERVAL_MINUTES} 之间的整数分钟")
         change.setdefault("interval", {})["batteryMs"] = minutes * 60000
     if "sleep" in body:
         sleep = body["sleep"]
         try:
             clean = config.validate({"quiet_hours": sleep})["quiet_hours"]  # same shape and rules
         except ValueError:
-            raise Problem("睡眠时段需要是 HH:MM 格式，且开始和结束不能相同") from None
+            raise Problem("休眠时段需要是 HH:MM 格式，且开始和结束不能相同") from None
         change["sleep"] = {"enabled": bool(sleep.get("enabled")), "start": sleep.get("start", clean["start"]),
                            "end": sleep.get("end", clean["end"])}
-    if not change:
+    if not change and "keep" not in body:
         raise Problem("没有要修改的内容")
-    try:
-        dot_api.update_settings(cfg, change)
-    except Exception as e:
-        raise Problem(f"设备设置没有保存：{e}", 502) from None
-    log.info("device settings changed: %s", ", ".join(sorted(change)))
+    if change:
+        try:
+            dot_api.update_settings(cfg, change)
+        except Exception as e:
+            raise Problem(f"设备设置没有保存：{e}", 502) from None
+        log.info("device settings changed: %s", ", ".join(sorted(change)))
+    if "keep" in body:
+        app.call(app.apply_config, {"keep_on_screen": body["keep"]})
     return device(app)
 
 
@@ -261,24 +270,27 @@ def run_checks(app) -> dict:
         add("连接 MindReset 服务", False, str(e))
     try:
         render(build_view(sample_board("wait")))
-        add("画面渲染", True, "字体可用")
+        add("画面生成", True, "字体可用")
     except Exception as e:
-        add("画面渲染", False, str(e))
+        add("画面生成", False, str(e))
     for agent, label in (("claude", "Claude 额度数据"), ("codex", "Codex 额度数据")):
         reading = (app.usage or {}).get(agent) or {}
         if reading.get("windows"):
             add(label, True, f"{_ago(time.time() - reading['observed_at'])}前的读数")
         elif reading.get("observed_at"):
             add(label, None, f"本机最近一次读数是 {_ago(time.time() - reading['observed_at'])}前的，太旧，不显示")
+        elif agent == "claude":
+            add(label, None, "claude 命令行没有给出额度，需要在终端里用 claude auth login 登录过"
+                if usage.claude_bin() else "没有找到 claude 命令行，额度靠它读取")
         else:
             add(label, None, "本机没有找到读数")
     last = app.last_push
     if last:
         # accepted by the service but not on the screen yet: worth a look, not a fault
-        add("最近一次推送", None if last.get("ok") and last.get("delivered") is False else last.get("ok", False),
+        add("最近一次刷新", None if last.get("ok") and last.get("delivered") is False else last.get("ok", False),
             f"{_ago(time.time() - last['at'])}前，{last.get('message', '')}")
     else:
-        add("最近一次推送", None, "启动后还没有推送过")
+        add("最近一次刷新", None, "启动后还没有刷新过")
     return {"results": results}
 
 

@@ -186,6 +186,25 @@ class ConsoleTest(unittest.TestCase):
                 self.assertEqual(self.request("POST", "/api/device", {"battery_minutes": bad})[0], 400)
         self.assertEqual(sent, [{"interval": {"batteryMs": 1_800_000}}])
 
+    def test_keeping_the_board_up_sets_the_device_and_the_daemon_together(self):
+        sent = []
+        on_device = {"interval": {"powerMs": 300_000}}
+
+        def update(cfg, body):
+            sent.append(body)
+            on_device["interval"].update(body.get("interval", {}))
+
+        with mock.patch.object(dot_api, "update_settings", side_effect=update), \
+                mock.patch.object(dot_api, "get_settings", side_effect=lambda cfg: json.loads(json.dumps(on_device))), \
+                mock.patch.object(web, "device", return_value={"ok": True}):
+            self.assertEqual(self.request("POST", "/api/device", {"keep": True})[0], 200)
+            self.assertTrue(self.app.cfg["keep_on_screen"])
+            self.assertEqual(self.request("POST", "/api/device", {"keep": True})[0], 200)  # already held: nothing to send
+            self.assertEqual(self.request("POST", "/api/device", {"keep": False})[0], 200)
+            self.assertFalse(self.app.cfg["keep_on_screen"])
+            self.assertEqual(self.request("POST", "/api/device", {"keep": "yes"})[0], 400)
+        self.assertEqual(sent, [{"interval": {"powerMs": 43_200_000}}, {"interval": {"powerMs": 300_000}}])
+
     def test_overview_lists_sessions(self):
         self.app.call(self.app.on_event, "claude", "UserPromptSubmit", {"session_id": "s", "cwd": "/p/alpha"})
         data = json.loads(self.request("GET", "/api/overview")[2])

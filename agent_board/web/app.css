@@ -113,6 +113,7 @@ body {
 .t-blue { background: #0a7aff; }
 .t-purple { background: #7d5bed; }
 .t-red { background: #f0434f; }
+.t-cyan { background: #2fa9d6; }
 .t-green { background: #34b759; }
 .t-orange { background: #f2913d; }
 .t-teal { background: #26a6a4; }
@@ -148,6 +149,12 @@ body {
 .row .value { color: var(--text-2); text-align: right; overflow-wrap: anywhere; }
 .row .controls { display: flex; align-items: center; gap: 8px; flex: none; }
 .empty { padding: 18px 0; text-align: center; color: var(--text-2); }
+
+/* The row a link from another page points at */
+.pointed { animation: pointed 2.4s ease-out; }
+.row.pointed { margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+.card:has(.pointed) { overflow: hidden; }
+@keyframes pointed { 0%, 40% { background: var(--info-bg); } 100% { background: transparent; } }
 
 /* Controls */
 button.btn {
@@ -314,5 +321,5 @@ a:hover { text-decoration: underline; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  * { transition: none !important; animation: none !important; }
 }

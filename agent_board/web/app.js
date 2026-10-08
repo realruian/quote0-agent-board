@@ -106,6 +106,7 @@ const ICONS = {
   overview: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   display: '<rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/>',
   alerts: '<path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15z"/><path d="M10 21a2 2 0 0 0 4 0"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.5-4M4 13a8 8 0 0 0 14.5 4"/><path d="M5 3v4h4M19 21v-4h-4"/>',
   integrations: '<path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0zM12 16v5"/>',
   device: '<path d="M3 9a14 14 0 0 1 18 0M6 12.5a9.5 9.5 0 0 1 12 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="0.8"/>',
   diagnostics: '<path d="M3 12h4l2-6 4 12 2-6h6"/>',
@@ -170,7 +171,14 @@ function select(options, value, onChange, label) {
 const pill = (text, kind) => h("span", { class: `pill ${kind}` }, text);
 const dot = (kind) => h("span", { class: `dot ${kind}` });
 const section = (title) => h("div", { class: "section-title" }, title);
-const hint = (text) => h("p", { class: "hint" }, text);
+const hint = (...content) => h("p", { class: "hint" }, content);
+const link = (text, target) => h("a", { href: `#${target}` }, text);
+
+// A row other pages can point at: "#refresh/battery" opens the page and highlights the row.
+function anchored(name, el) {
+  el.dataset.anchor = name;
+  return el;
+}
 
 function screen(caption) {
   const img = h("img", { alt: "墨水屏画面预览", width: 592, height: 304 });
@@ -218,25 +226,27 @@ async function overviewPage(mount, onLeave) {
     const missed = lastPush.ok && lastPush.delivered === false;
     const since = device && device.last_render ? `，屏幕停在 ${device.last_render} 的画面` : "";
     banner.replaceChildren(
-      dryRun ? h("div", { class: "banner" }, "空跑模式：画面只在本机渲染，不会发到屏幕上。") : "",
-      missed ? h("div", { class: "banner" }, `设备休眠或离线，最新画面没有显示出来${since}。接上电源后会自动补上；用电池时要等它下次唤醒。`) : "");
+      dryRun ? h("div", { class: "banner" }, "空跑模式：画面只在本机生成，不会发到屏幕上。") : "",
+      missed ? h("div", { class: "banner" }, `设备休眠或离线，最新画面没有显示出来${since}。接上电源后会自动补上；用电池时要等它下次醒来。`,
+        link("更改刷新间隔", "refresh/battery")) : "");
   }
 
   const WINDOW = { five_hour: "5 小时", seven_day: "本周" };
+  const QUOTA_NEEDS = { Claude: "需要在终端里登录过 Claude Code", Codex: "Codex 回复一次后就有" }; // what a first reading takes
   function quotaRow(name, reading) {
     const windows = (reading && reading.windows) || {};
     const parts = Object.keys(WINDOW).filter((k) => windows[k]).map((k) => `${WINDOW[k]}剩 ${windows[k].left}%`);
     let text = parts.join(" · ");
-    if (!parts.length) text = reading && reading.observed_at ? `暂无可信数据，本机最近一次读数是${ago(reading.observed_at)}的` : "本机没有找到读数";
-    else text += ` · ${ago(reading.observed_at)}的读数`;
+    if (!parts.length) text = reading && reading.observed_at ? `上次读数已过期（${ago(reading.observed_at)}），等下一次读取` : `还没有数据，${QUOTA_NEEDS[name]}`;
+    else text += ` · ${ago(reading.observed_at)}更新`;
     return info(h("span", null, dot(parts.length ? "ok" : "warn"), name), text);
   }
 
-  const refreshBtn = button("立即刷新屏幕", () => busy(refreshBtn, async () => {
+  const refreshBtn = button("刷新屏幕", () => busy(refreshBtn, async () => {
     await api("/api/refresh", {});
-    toast("已请求刷新");
+    toast("正在刷新屏幕");
   }));
-  const testBtn = button("发测试画面", () => busy(testBtn, async () => {
+  const testBtn = button("发送测试画面", () => busy(testBtn, async () => {
     await api("/api/test-frame", {});
     toast("测试画面已发出，15 秒后自动恢复");
   }));
@@ -245,15 +255,17 @@ async function overviewPage(mount, onLeave) {
     h("div", { class: "card" }, h("div", { class: "split" }, h("div", { class: "status-lines" }, lines, deviceLine),
       h("div", { class: "btn-row" }, refreshBtn, testBtn))),
     section("剩余额度"), quota,
-    section("当前会话"), sessions);
+    section("当前对话"), sessions);
 
   api("/api/device").then((d) => {
     const s = d.status || {};
     device = d;
     drawBanner();
-    deviceLine.replaceChildren(dot(!d.ok ? "bad" : d.asleep ? "warn" : "ok"),
-      d.ok ? `设备：${[s.current, s.battery, s.wifi && `Wi-Fi ${s.wifi}`].filter(Boolean).join(" · ")}` : `设备：连接失败（${d.error || "未知原因"}）`);
-  }).catch((error) => deviceLine.replaceChildren(dot("bad"), `设备：${error.message}`));
+    if (!d.ok) deviceLine.replaceChildren(dot("bad"), `连不上设备：${d.error || "未知原因"}`);
+    else if ((s.battery || "").includes("已连接电源")) deviceLine.replaceChildren(dot("ok"), "设备已接电源，有变化就刷新");
+    else deviceLine.replaceChildren(dot(d.asleep ? "warn" : "ok"),
+      `设备：${[s.current, s.battery].filter(Boolean).join(" · ")}，用电池时每 ${d.battery_minutes} 分钟刷新一次 `, link("更改", "refresh/battery"));
+  }).catch((error) => deviceLine.replaceChildren(dot("bad"), `连不上设备：${error.message}`));
 
   async function tick() {
     let data;
@@ -273,15 +285,18 @@ async function overviewPage(mount, onLeave) {
       frameVersion = pushedAt;
       view.img.src = `/api/frame.png?v=${pushedAt}`;
     }
-    view.caption.textContent = !push.at ? "还没有推送过画面"
-      : missed ? `最新画面，还没显示到屏幕上 · ${ago(push.at)}推送（${clock(push.at)}）`
+    view.caption.textContent = !push.at ? "还没有刷新过屏幕"
+      : missed ? `最新画面，还没显示到屏幕上 · ${ago(push.at)}发出（${clock(push.at)}）`
       : `屏幕当前画面 · ${ago(push.at)}刷新（${clock(push.at)}）`;
     const quiet = data.view_kind === "quiet";
-    lines.replaceChildren(
-      h("div", null, dot("ok"), `后台进程运行中 · ${ago(data.started_at)}启动`),
-      push.at ? h("div", null, dot(!push.ok ? "bad" : missed ? "warn" : "ok"),
-        !push.ok ? `最近一次推送失败：${push.message}` : missed ? "最近一次推送未送达：设备休眠或离线" : "最近一次推送成功") : "",
-      quiet ? h("div", null, dot("warn"), "夜间免打扰中，屏幕暂不刷新") : "");
+    // Say one thing when all is well, and name the broken link only when there is one.
+    const notes = [
+      push.at && !push.ok && h("div", null, dot("bad"), `最近一次刷新失败：${push.message}`),
+      missed && h("div", null, dot("warn"), "最新画面还没显示：设备休眠或离线"),
+      quiet && h("div", null, dot("warn"), "夜间免打扰中，屏幕暂不刷新"),
+    ].filter(Boolean);
+    if (!notes.length && !data.dry_run) notes.push(h("div", null, dot(push.at ? "ok" : ""), push.at ? "屏幕已是最新" : "还没有刷新过屏幕"));
+    lines.replaceChildren(...notes);
     quota.replaceChildren(quotaRow("Claude", data.usage.claude), quotaRow("Codex", data.usage.codex));
     sessions.replaceChildren(...(data.sessions.length
       ? data.sessions.map((s) => h("div", { class: "row" },
@@ -289,7 +304,7 @@ async function overviewPage(mount, onLeave) {
             h("div", { class: "sub" }, [AGENT[s.source] || s.source, s.title && (s.alias || s.project), s.alias && `原名 ${s.project}`, s.hidden && "已隐藏，不上屏",
               s.since && `${clock(s.since)} ${s.state === "done" || s.state === "error" ? "结束" : "起"}`].filter(Boolean).join(" · "))),
           h("div", { class: "controls" }, statePill(s))))
-      : [h("div", { class: "empty" }, "现在没有在跟踪的会话。开一个 Claude Code 或 Codex 会话就会出现在这里。")]));
+      : [h("div", { class: "empty" }, "现在没有对话。在 Claude Code 或 Codex 里开始一个，就会出现在这里。")]));
   }
 
   await tick();
@@ -314,7 +329,7 @@ async function displayPage(mount) {
   }, 120);
 
   const draft = () => ({
-    font: config.font, keep_on_screen: config.keep_on_screen, show_titles: config.show_titles, show_detail: config.show_detail, show_usage: config.show_usage,
+    font: config.font, show_titles: config.show_titles, show_detail: config.show_detail, show_usage: config.show_usage,
     max_rows: config.max_rows, idle_show_last: config.idle_show_last,
     aliases: config.aliases, hidden_projects: config.hidden_projects, done_ttl_minutes: config.done_ttl_minutes,
   });
@@ -352,7 +367,7 @@ async function displayPage(mount) {
       if (!known.includes(name)) known.push(name);
       drawProjects();
     });
-    projects.replaceChildren(...rows, h("div", { class: "row" }, h("div", { class: "label" }, "添加项目", h("div", { class: "sub" }, "项目名就是会话所在文件夹的名字")), h("div", { class: "controls" }, input, add)));
+    projects.replaceChildren(...rows, h("div", { class: "row" }, h("div", { class: "label" }, "添加项目", h("div", { class: "sub" }, "项目名是对话所在文件夹的名字")), h("div", { class: "controls" }, input, add)));
   }
   drawProjects();
 
@@ -362,16 +377,19 @@ async function displayPage(mount) {
       preview();
     })),
     card(
-      row("字体", "屏幕是纯黑白的，没有灰度，不同字体的笔画粗细会有差别", select(fonts.map((f) => [f.key, f.label]), config.font, (v) => change("font", v), "字体")),
-      row("显示对话名称", "和 Claude、Codex 侧边栏里的名称一致；新对话还没有名称时，先用你发的第一句话。关闭后只显示项目名。画面会经过 MindReset 的服务器", toggle(config.show_titles, (on) => change("show_titles", on), "显示对话名称")),
+      row("字体", "屏幕只有黑白两色，不同字体的笔画粗细会有差别", select(fonts.map((f) => [f.key, f.label]), config.font, (v) => change("font", v), "字体")),
+      row("显示对话名称", "和 Claude、Codex 侧边栏里的名称一致；新对话先用你发的第一句话", toggle(config.show_titles, (on) => change("show_titles", on), "显示对话名称")),
       row("等批准时显示工具名", "例如 Bash、Edit", toggle(config.show_detail, (on) => change("show_detail", on), "等批准时显示工具名")),
-      row("显示剩余额度", "有 Agent 在跑时显示在顶栏，空闲时显示完整的额度条。示例里的数字是演示用的", toggle(config.show_usage, (on) => change("show_usage", on), "显示剩余额度")),
-      row("被顶掉时自动切回", "循环列表里的其他内容（比如画板 API、文本 API）把状态牌顶掉时，一分钟内自动切回来", toggle(config.keep_on_screen, (on) => change("keep_on_screen", on), "被顶掉时自动切回")),
-      row("最多显示几行", "会话更多时，最后一行显示“还有 N 个”", numberField(config.max_rows, 1, 4, "行", (n) => change("max_rows", n))),
-      row("完成后保留多久", "会话结束后在屏幕上停留的时间", numberField(config.done_ttl_minutes, 1, 720, "分钟", (n) => change("done_ttl_minutes", n))),
+      row("显示剩余额度", "有 Agent 在运行时显示在顶栏，空闲时显示完整的额度条", toggle(config.show_usage, (on) => change("show_usage", on), "显示剩余额度")),
+      row("最多行数", "对话更多时，优先显示等你处理的和最近有动静的", numberField(config.max_rows, 1, 4, "行", (n) => change("max_rows", n))),
       row("空闲时显示上次完成的项目", null, toggle(config.idle_show_last, (on) => change("idle_show_last", on), "空闲时显示上次完成的项目"))),
+    section("对话保留"),
+    card(
+      row("完成后保留", "对话结束后在屏幕上停留的时间", numberField(config.done_ttl_minutes, 1, 720, "分钟", (n) => change("done_ttl_minutes", n))),
+      row("无响应后移除", "被中断的对话不会自己结束，超过这个时间自动移除", numberField(config.stale_running_minutes, 5, 1440, "分钟", (n) => save({ stale_running_minutes: n })))),
     section("项目别名和隐藏"), projects,
-    hint("别名会替换屏幕上的项目名；隐藏的项目不上屏，也不会触发整屏提醒。示例画面用的是演示项目，选“实际状态”可以看到别名效果。"));
+    hint("别名会替换屏幕上的项目名。隐藏的项目不显示在屏幕上，也不触发整屏提醒。"),
+    hint("示例画面里的项目和额度是演示用的，选“实际状态”可以看到真实效果。画面会经过 MindReset 的服务器发到设备。"));
   preview();
 }
 
@@ -383,10 +401,6 @@ async function alertsPage(mount) {
     config.takeover[kind] = on;
     save({ takeover: { [kind]: on } });
   }, label));
-  const quiet = (patch) => {
-    Object.assign(config.quiet_hours, patch);
-    save({ quiet_hours: patch });
-  };
 
   mount.append(
     section("整屏提醒"),
@@ -394,16 +408,76 @@ async function alertsPage(mount) {
       takeover("permission", "等你批准时", "Agent 要执行需要授权的操作"),
       takeover("question", "等你回答时", "Agent 向你提问"),
       takeover("plan", "等你看计划时", "Agent 写好计划等你确认")),
-    hint("开启后，对应情况会整屏反色显示并立即刷新。关闭后只在列表里显示成一行。"),
-    section("刷新节奏"),
-    card(
-      row("最小刷新间隔", "普通变化之间至少隔这么久，减少屏幕闪烁。整屏提醒不受限制", numberField(config.min_push_interval_seconds, 3, 600, "秒", (n) => save({ min_push_interval_seconds: n }))),
-      row("多久没动静就移除", "运行中的会话被中断后不会自己结束，超过这个时间自动清掉", numberField(config.stale_running_minutes, 5, 1440, "分钟", (n) => save({ stale_running_minutes: n })))),
-    section("夜间免打扰"),
-    card(
-      row("开启免打扰", "时段内屏幕显示“夜间免打扰”，不再刷新", toggle(config.quiet_hours.enabled, (on) => quiet({ enabled: on }), "开启免打扰")),
-      row("开始时间", null, timeField(config.quiet_hours.start, (v) => quiet({ start: v }))),
-      row("结束时间", null, timeField(config.quiet_hours.end, (v) => quiet({ end: v })))));
+    hint("整屏反色显示，并立即刷新。关闭的情况只在列表里显示成一行。"),
+    hint(link("夜间免打扰", "refresh/quiet"), "可以让屏幕在夜间停止刷新。"));
+}
+
+// Everything that decides when the screen changes, whether the daemon or the device holds the setting.
+async function refreshPage(mount) {
+  const body = h("div");
+  mount.append(body);
+
+  // `d` is missing while the device is still being asked; what the daemon holds can be changed meanwhile.
+  function draw(config, d) {
+    const ready = d && d.ok;
+    const save = makeSaver();
+    const quiet = (patch) => {
+      Object.assign(config.quiet_hours, patch);
+      save({ quiet_hours: patch });
+    };
+    const apply = async (patch, done) => {
+      try {
+        draw(config, await api("/api/device", patch));
+        toast(done);
+      } catch (error) {
+        toast(error.message, true);
+        load();
+      }
+    };
+    const WAKE = [[1, "1 分钟"], [5, "5 分钟"], [10, "10 分钟"], [15, "15 分钟"], [30, "30 分钟"], [60, "1 小时"], [180, "3 小时"], [360, "6 小时"], [720, "12 小时"]];
+    const wakeOptions = () => (WAKE.some(([m]) => m === d.battery_minutes) ? WAKE : [...WAKE, [d.battery_minutes, `${d.battery_minutes} 分钟`]])
+      .sort((a, b) => a[0] - b[0]).map(([m, text]) => [String(m), text]);
+    const sleep = { ...(d && d.sleep) };
+    const saveSleep = (patch) => apply({ sleep: Object.assign(sleep, patch) }, "已保存");
+
+    body.replaceChildren(...[
+      d && !d.ok && h("div", { class: "banner" }, `连不上设备：${d.error}。存在设备上的几项设置暂时改不了。 `, h("a", { href: "#", onclick: (e) => { e.preventDefault(); load(); } }, "重试")),
+      section("刷新间隔"),
+      card(
+        row("插电时的最小间隔", "有变化就刷新，两次之间至少隔这么久。整屏提醒不受限制",
+          numberField(config.min_push_interval_seconds, 3, 600, "秒", (n) => {
+            config.min_push_interval_seconds = n;
+            save({ min_push_interval_seconds: n });
+          })),
+        ready && anchored("battery", row("用电池时的刷新间隔", "设备平时休眠，每隔这么久醒来刷新一次。间隔越短越耗电",
+          select(wakeOptions(), String(d.battery_minutes), (v) => apply({ battery_minutes: Number(v) }, "已保存"), "用电池时的刷新间隔")))),
+      ready && card(
+        row("始终显示状态牌", "设备循环列表里的其他内容不会替换状态牌",
+          toggle(d.keep, (on) => {
+            config.keep_on_screen = on;
+            apply({ keep: on }, on ? "已开启" : "已关闭");
+          }, "始终显示状态牌"))),
+      section("夜间"),
+      anchored("quiet", card(
+        row("夜间免打扰", "时段内屏幕显示“夜间免打扰”，停止刷新", toggle(config.quiet_hours.enabled, (on) => quiet({ enabled: on }), "夜间免打扰")),
+        row("开始时间", null, timeField(config.quiet_hours.start, (v) => quiet({ start: v }))),
+        row("结束时间", null, timeField(config.quiet_hours.end, (v) => quiet({ end: v }))))),
+      ready && card(
+        row("定时休眠", "时段内设备整机休眠，循环列表里的其他内容也不刷新", toggle(!!sleep.enabled, (on) => saveSleep({ enabled: on }), "定时休眠")),
+        row("开始时间", null, timeField(sleep.start || "23:00", (v) => saveSleep({ start: v }))),
+        row("结束时间", null, timeField(sleep.end || "07:00", (v) => saveSleep({ end: v })))),
+      ready && hint(`定时休眠按设备的时区（${d.timezone || "未知"}）计算。`),
+      !d && hint("正在读取存在设备上的设置…"),
+    ].filter(Boolean));
+  }
+
+  async function load() {
+    const device = api("/api/device").catch((error) => ({ ok: false, error: error.message }));
+    const { config } = await api("/api/settings");
+    draw(config);
+    draw(config, await device);
+  }
+  await load();
 }
 
 async function integrationsPage(mount) {
@@ -418,20 +492,20 @@ async function integrationsPage(mount) {
       let status;
       if (!st.exists) status = "没有找到它的配置文件，可能没装";
       else if (st.error) status = st.error;
-      else if (full) status = `已开启，${st.installed} 个钩子`;
-      else if (on) status = `只装了 ${st.installed}/${st.expected} 个钩子，关掉再打开可以修复`;
-      else status = "未开启";
+      else if (full) status = "已连接";
+      else if (on) status = `连接不完整（${st.installed}/${st.expected}），关掉再打开可以修复`;
+      else status = "未连接";
       const sw = toggle(on, async (checked, input) => {
         input.disabled = true;
         try {
           draw(await api("/api/integrations", { agent: id, enabled: checked }));
-          toast(checked ? `${name} 已开启` : `${name} 已关闭`);
+          toast(checked ? `${name} 已连接` : `${name} 已断开`);
         } catch (error) {
           toast(error.message, true);
           input.checked = !checked;
           input.disabled = false;
         }
-      }, `${name} 上报开关`);
+      }, `连接 ${name}`);
       if (!st.exists) sw.querySelector("input").disabled = true;
       return card(
         row(h("span", null, dot(!st.exists ? "" : full ? "ok" : on ? "warn" : ""), name), status, sw),
@@ -442,8 +516,8 @@ async function integrationsPage(mount) {
     body.replaceChildren(
       data.hook_installed ? "" : h("div", { class: "banner" }, "没有找到钩子脚本，请重新运行安装命令。"),
       agentCard("claude", "Claude Code"),
-      agentCard("codex", "Codex", "开启后 Codex 下次启动会要求你确认信任新钩子，确认后才会上报。"),
-      hint("开关会修改对应 Agent 的全局配置文件，每次修改前都会备份。钩子只追加在已有钩子之后，不改动其他工具的配置。"));
+      agentCard("codex", "Codex", "连接后，Codex 下次启动会要求你确认信任新钩子，确认后才生效。"),
+      hint("开关会修改对应 Agent 的全局配置文件，修改前会备份，不改动其他工具的配置。只对之后新开的对话生效。"));
   }
   draw(await api("/api/integrations"));
 }
@@ -455,7 +529,7 @@ async function devicePage(mount) {
   function draw(d) {
     if (!d.ok) {
       body.replaceChildren(
-        h("div", { class: "banner" }, `连不上设备服务：${d.error}`),
+        h("div", { class: "banner" }, `连不上设备：${d.error}`),
         card(info("设备序列号", d.device_id), info("API 密钥", d.key.looks_valid ? "格式正确" : d.key.present ? "内容不像 Dot 密钥" : "没有找到密钥文件")),
         h("div", { class: "btn-row", style: "margin-top:12px" }, button("重试", load)));
       return;
@@ -471,37 +545,23 @@ async function devicePage(mount) {
       }
     };
     const alias = h("input", { class: "field name", type: "text", value: d.alias, placeholder: "未命名", maxLength: 100, "aria-label": "设备名称" });
-    const WAKE = [[1, "1 分钟"], [5, "5 分钟"], [10, "10 分钟"], [15, "15 分钟"], [30, "30 分钟"], [60, "1 小时"], [180, "3 小时"], [360, "6 小时"], [720, "12 小时"]];
-    const wakeOptions = (WAKE.some(([m]) => m === d.battery_minutes) ? WAKE : [...WAKE, [d.battery_minutes, `${d.battery_minutes} 分钟`]])
-      .sort((a, b) => a[0] - b[0]).map(([m, text]) => [String(m), text]);
-    const sleep = { ...d.sleep };
-    const saveSleep = (patch) => apply({ sleep: Object.assign(sleep, patch) }, "睡眠时段已保存");
 
     body.replaceChildren(
-      d.image_slot ? "" : h("div", { class: "banner" }, "设备的循环列表里没有“图像 API”，状态牌发不上去。请在 Dot. App 的内容工坊里添加。"),
-      d.asleep ? h("div", { class: "banner" }, `设备休眠中，状态牌不会实时更新。接上电源可以唤醒；用电池时每 ${d.battery_minutes} 分钟唤醒一次。`) : "",
-      section("状态"),
+      d.image_slot ? "" : h("div", { class: "banner" }, "设备的循环列表里没有“图像 API”，状态牌显示不出来。请在 Dot. App 的内容工坊里添加。"),
+      d.asleep ? h("div", { class: "banner" }, `设备休眠中，每 ${d.battery_minutes} 分钟醒来刷新一次。接上电源后有变化就刷新。 `, link("更改刷新间隔", "refresh/battery")) : "",
       card(
         info("当前状态", h("span", null, dot(d.asleep ? "warn" : "ok"), s.current || "未知")),
         info("供电", s.battery || "未知"),
         info("Wi-Fi 信号", s.wifi || "未知"),
+        info("上次刷新", d.last_render || "未知"),
         info("固件版本", s.version || "未知"),
-        info("上次渲染", d.last_render || "未知"),
+        info("时区", d.timezone || "未知"),
         info("设备序列号", d.device_id),
-        info("API 密钥", d.key.looks_valid ? "有效（不在网页中显示）" : "格式不对")),
-      section("设置"),
+        info("API 密钥", d.key.looks_valid ? "有效" : "格式不对")),
+      section("名称"),
       card(
-        row("设备名称", "显示在 Dot. App 里", alias, button("保存", () => apply({ alias: alias.value }, "名称已保存"))),
-        row("保持状态牌常显", d.hold ? "插电时循环间隔为 12 小时，其他内容不会顶掉状态牌" : `插电时每 ${d.power_minutes} 分钟轮换一次，状态牌会被其他内容顶掉`,
-          toggle(d.hold, (on) => apply({ hold: on }, on ? "已开启常显" : "已恢复轮换"), "保持状态牌常显")),
-        row("用电池时的唤醒间隔", "不插电时设备休眠，每隔这么久醒来更新一次；间隔越短越耗电。插电时不受这个限制，有变化就刷新",
-          select(wakeOptions, String(d.battery_minutes), (v) => apply({ battery_minutes: Number(v) }, "唤醒间隔已保存"), "用电池时的唤醒间隔"))),
-      section("设备睡眠时段"),
-      card(
-        row("开启睡眠", "这是设备自带的功能：时段内设备整体休眠，所有内容都不更新", toggle(!!sleep.enabled, (on) => saveSleep({ enabled: on }), "开启设备睡眠")),
-        row("开始时间", null, timeField(sleep.start || "23:00", (v) => saveSleep({ start: v }))),
-        row("结束时间", null, timeField(sleep.end || "07:00", (v) => saveSleep({ end: v })))),
-      hint(`时区 ${d.timezone || "未知"}。更换密钥或设备需要重新运行安装命令。`));
+        row("设备名称", "显示在 Dot. App 里", alias, button("保存", () => apply({ alias: alias.value }, "已保存")))),
+      hint("刷新间隔和休眠时段在", link("刷新", "refresh"), "里。更换密钥或设备需要重新运行安装命令。"));
   }
 
   async function load() {
@@ -570,9 +630,10 @@ async function aboutPage(mount) {
 
 const PAGES = [
   { id: "overview", label: "总览", color: "t-blue", render: overviewPage },
-  { id: "display", label: "显示", color: "t-purple", render: displayPage },
+  { id: "display", label: "画面", color: "t-purple", render: displayPage },
+  { id: "refresh", label: "刷新", color: "t-cyan", render: refreshPage },
   { id: "alerts", label: "提醒", color: "t-red", render: alertsPage },
-  { id: "integrations", label: "集成", color: "t-green", render: integrationsPage },
+  { id: "integrations", label: "Agent", color: "t-green", render: integrationsPage },
   { id: "device", label: "设备", color: "t-orange", render: devicePage },
   { id: "diagnostics", label: "诊断", color: "t-teal", group: "高级", render: diagnosticsPage },
   { id: "about", label: "关于", color: "t-gray", render: aboutPage },
@@ -582,7 +643,8 @@ let leave = [];
 let visit = 0;
 
 async function show() {
-  const page = PAGES.find((p) => p.id === location.hash.slice(1)) || PAGES[0];
+  const [id, anchor] = location.hash.slice(1).split("/");
+  const page = PAGES.find((p) => p.id === id) || PAGES[0];
   const mine = ++visit;
   leave.forEach((fn) => fn());
   leave = [];
@@ -600,6 +662,11 @@ async function show() {
   document.getElementById("page").replaceChildren(mount);
   try {
     await page.render(mount, (fn) => (mine === visit ? leave.push(fn) : fn()));
+    const target = anchor && mine === visit && mount.querySelector(`[data-anchor="${CSS.escape(anchor)}"]`);
+    if (target) {
+      target.scrollIntoView({ block: "center" });
+      target.classList.add("pointed");
+    }
   } catch (error) {
     mount.replaceChildren(h("div", { class: "banner" }, error.message));
   }
