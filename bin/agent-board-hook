@@ -1,0 +1,21 @@
+#!/bin/sh
+# Forward one agent hook event to the status-board daemon and return at once.
+# Usage: agent-board-hook <source> <event>   (hook JSON on stdin)
+#
+# Never blocks or fails the agent: the send runs in the background and every
+# path exits 0. Only the first 4 KB of the payload is forwarded, which holds
+# the session id, cwd, tool name and the start of the user's prompt (the board
+# shows it as the task title), but not file contents or tool output.
+
+LC_ALL=C
+export LC_ALL
+SOCK="${AGENT_BOARD_HOME:-$HOME/.quote0-agent-board}/run/board.sock"
+
+if [ ! -S "$SOCK" ]; then
+    cat >/dev/null
+    exit 0
+fi
+
+payload=$(head -c 4096; cat >/dev/null)
+(printf '%s %s %s\n%s' "$1" "$2" "${#payload}" "$payload" | /usr/bin/nc -U -w 2 "$SOCK") >/dev/null 2>&1 &
+exit 0

@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Local development instance (AGENT_BOARD_HOME=.dev-home)
+.dev-home/
+
+# Frames rendered from a real board carry real conversation names.
+# The pictures in docs/images/ are rendered from made-up data instead.
+/preview.png
+/current-screen.png
