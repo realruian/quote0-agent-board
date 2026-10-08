@@ -89,9 +89,9 @@ flowchart TB
 - **Daemon** (`agent_board/daemon.py`): keeps the state of every conversation, decides when to refresh, and renders the frame locally with Pillow.
 - **Push**: frames reach the device through MindReset's official [Image API](https://dot.mindreset.tech/docs/service/open/image_api).
 
-## The Swift app (an experiment on this branch)
+## The Swift app (experimental)
 
-This branch rewrites the daemon in Swift as an ordinary Mac app: it has a Dock icon, its settings are in a window of its own, a small icon in the menu bar shows the state, and Python is no longer needed. The window is native, written in SwiftUI; it needs macOS 14 or newer. The configuration file and hooks are shared with the Python version, so you can switch between the two.
+The daemon also exists rewritten in Swift, as an ordinary Mac app: it has a Dock icon, its settings are in a window of its own, a small icon in the menu bar shows the state, and Python is no longer needed. The window is native, written in SwiftUI; it needs macOS 14 or newer. The configuration file and hooks are shared with the Python version, so you can switch between the two.
 
 ```bash
 python3 scripts/build_app.py

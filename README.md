@@ -86,9 +86,9 @@ flowchart TB
 - **后台进程**（`agent_board/daemon.py`）：维护每个对话的状态，决定什么时候刷屏，用 Pillow 在本机把画面渲染成黑白图。
 - **推送**：通过 MindReset 官方的[图像 API](https://dot.mindreset.tech/docs/service/open/image_api) 发到设备。
 
-## Swift 版 App（这个分支上的试验）
+## Swift 版 App（试验）
 
-这个分支把后台进程用 Swift 重写了一遍，做成了一个普通的 Mac App：程序坞里有图标，设置在它自己的窗口里，菜单栏上有一个显示状态的小图标，不再需要 Python。窗口是用 SwiftUI 写的原生界面；需要 macOS 14 或更新版本。配置文件和钩子与 Python 版通用，两个版本可以来回切换。
+后台进程另有一个用 Swift 重写的版本，是一个普通的 Mac App：程序坞里有图标，设置在它自己的窗口里，菜单栏上有一个显示状态的小图标，不再需要 Python。窗口是用 SwiftUI 写的原生界面；需要 macOS 14 或更新版本。配置文件和钩子与 Python 版通用，两个版本可以来回切换。
 
 ```bash
 python3 scripts/build_app.py
