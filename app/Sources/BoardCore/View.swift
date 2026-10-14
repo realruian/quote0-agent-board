@@ -32,6 +32,20 @@ public struct AgentUsage: Equatable {
     }
 }
 
+/// The device's own charge: percent left when known, and whether it is on power.
+public struct DevicePower: Equatable {
+    public var percent: Int?
+    public var plugged: Bool
+
+    public init(percent: Int?, plugged: Bool) {
+        self.percent = percent
+        self.plugged = plugged
+    }
+
+    /// Low enough to be shown in reverse, to say it wants charging.
+    var low: Bool { !plugged && (percent ?? 100) < 20 }
+}
+
 /// Readings per agent ("claude", "codex").
 public typealias Usage = [String: AgentUsage]
 
@@ -74,6 +88,7 @@ public struct FrameView: Equatable {
     public var rows: [ViewRow] = []
     public var quota: [QuotaEntry]?
     public var more = 0  // conversations that did not fit
+    public var power: DevicePower?  // the device's charge, in the top right corner
     // idle, and notices such as quiet hours
     public var line = ""
     public var last = ""
@@ -110,8 +125,10 @@ public struct FrameView: Equatable {
                 entry.agent + "\u{1}" + entry.rows.map { "\($0.window) \($0.short) \(step($0.left)) \($0.reset) \($0.runsOut)" }.joined(separator: "\u{1}")
             }.joined(separator: "\u{2}")
         } ?? "none"
+        // the charge in ten-point steps, as quota is in five: each change is a refresh
+        let powerText = power.map { $0.plugged ? "plugged \($0.percent.map { $0 / 10 } ?? -1)" : "\(($0.percent ?? 0) / 10) \($0.low)" } ?? "none"
         return [kind.rawValue, font, title, task, agent, detail, since, footer, summary, rowText.joined(separator: "\u{2}"),
-                quotaText, String(more), line, last, note].joined(separator: "\u{3}")
+                quotaText, String(more), powerText, line, last, note].joined(separator: "\u{3}")
     }
 }
 
@@ -178,7 +195,13 @@ func quotaEntries(_ usage: Usage, _ now: Double) -> [QuotaEntry] {
 
 /// Describe the frame for the board as it stands.
 public func buildView(_ board: Board, now: Double = Date().timeIntervalSince1970, settings: Settings = Settings(),
-                      usage: Usage? = nil) -> FrameView {
+                      usage: Usage? = nil, power: DevicePower? = nil) -> FrameView {
+    var view = buildFrame(board, now: now, settings: settings, usage: usage)
+    if settings.showBattery { view.power = power }
+    return view
+}
+
+private func buildFrame(_ board: Board, now: Double, settings: Settings, usage: Usage?) -> FrameView {
     let hidden = Set(settings.hiddenProjects)
     let quota = settings.showUsage ? usage.map { quotaEntries($0, now) } : nil
 
@@ -247,6 +270,9 @@ public func buildView(_ board: Board, now: Double = Date().timeIntervalSince1970
     view.quota = quota
     return view
 }
+
+/// A made-up charge for previewing settings.
+public let samplePower = DevicePower(percent: 76, plugged: false)
 
 /// Made-up quota for previewing settings.
 public let sampleUsage: Usage = [

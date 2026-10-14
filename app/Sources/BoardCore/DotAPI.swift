@@ -95,6 +95,16 @@ public enum DotAPI {
     /// offline device has the frame kept for it and shows it when it next wakes.
     public static func delivered(_ message: String) -> Bool { !message.contains("休眠") && !message.contains("离线") }
 
+    /// The device's charge as its status gives it: "86%" on battery, "已连接电源" on power.
+    /// nil when the status says neither.
+    public static func power(_ status: JSON) -> DevicePower? {
+        guard let text = status["status"]?["battery"]?.string, !text.isEmpty else { return nil }
+        let digits = text.range(of: "\\d+", options: .regularExpression).flatMap { Int(text[$0]) }
+        let plugged = text.contains("电源") || text.contains("充电")
+        guard plugged || digits != nil else { return nil }
+        return DevicePower(percent: digits.map { min(max($0, 0), 100) }, plugged: plugged)
+    }
+
     /// Whether a status says the device is sleeping to save battery.
     public static func asleep(_ status: JSON) -> Bool { (status["status"]?["current"]?.string ?? "").contains("休眠") }
 

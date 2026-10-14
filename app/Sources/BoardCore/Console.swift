@@ -107,8 +107,8 @@ public final class Console {
         let draft = Settings(stored: stored)
         let sample = body["sample"]?.string ?? "live"
         switch sample {
-        case "live": return render(engine.locked { buildView(engine.board, settings: draft, usage: engine.usage) }).png
-        case "list", "wait", "idle": return render(buildView(sampleBoard(sample), settings: draft, usage: sampleUsage)).png
+        case "live": return render(engine.locked { buildView(engine.board, settings: draft, usage: engine.usage, power: engine.power) }).png
+        case "list", "wait", "idle": return render(buildView(sampleBoard(sample), settings: draft, usage: sampleUsage, power: samplePower)).png
         default: throw Problem("未知的示例画面")
         }
     }

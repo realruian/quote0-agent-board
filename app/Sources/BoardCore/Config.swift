@@ -64,6 +64,7 @@ public struct Settings: Equatable {
     public var showTitles = true
     public var showDetail = false
     public var showUsage = true  // quota left, in the top bar and on the idle screen
+    public var showBattery = true  // the device's own charge, in the top right corner
     // When the device shows other loop content (its loop moved on, or the list was
     // edited in the Dot app), put the board back.
     public var keepOnScreen = true
@@ -83,7 +84,7 @@ public struct Settings: Equatable {
     public static let takeoverKinds = ["permission", "question", "plan"]
     public static let fontChoices = ["pingfang", "misans", "hiragino", "arkpixel", "zhengge", "chill"]
     /// What the settings page may change. The rest identifies the device.
-    public static let editable = ["font", "keep_on_screen", "paused", "show_titles", "show_detail", "show_usage", "max_rows",
+    public static let editable = ["font", "keep_on_screen", "paused", "show_titles", "show_detail", "show_usage", "show_battery", "max_rows",
                                   "idle_show_last", "aliases", "hidden_projects", "done_ttl_minutes", "takeover", "quiet_hours",
                                   "min_push_interval_seconds", "stale_running_minutes"]
 
@@ -101,6 +102,7 @@ public struct Settings: Equatable {
         flag("show_titles", &showTitles)
         flag("show_detail", &showDetail)
         flag("show_usage", &showUsage)
+        flag("show_battery", &showBattery)
         flag("keep_on_screen", &keepOnScreen)
         flag("paused", &paused)
         text("font", &font)
@@ -135,7 +137,7 @@ public struct Settings: Equatable {
         for name in aliases.keys.sorted() { aliasObject[name] = .string(aliases[name]!) }
         return [
             "font": .string(font), "keep_on_screen": .bool(keepOnScreen), "paused": .bool(paused),
-            "show_titles": .bool(showTitles), "show_detail": .bool(showDetail), "show_usage": .bool(showUsage),
+            "show_titles": .bool(showTitles), "show_detail": .bool(showDetail), "show_usage": .bool(showUsage), "show_battery": .bool(showBattery),
             "max_rows": JSON(maxRows), "idle_show_last": .bool(idleShowLast), "aliases": .object(aliasObject),
             "hidden_projects": JSON(hiddenProjects), "done_ttl_minutes": JSON(doneTTLMinutes), "takeover": takeoverJSON,
             "quiet_hours": quietHours.json, "min_push_interval_seconds": JSON(minPushIntervalSeconds),
@@ -217,7 +219,7 @@ public enum ConfigStore {
         for (key, value) in patch.pairs {
             guard Settings.editable.contains(key) else { throw ConfigError(message: "不能在这里修改 \(key)") }
             switch key {
-            case "keep_on_screen", "paused", "show_titles", "show_detail", "show_usage", "idle_show_last":
+            case "keep_on_screen", "paused", "show_titles", "show_detail", "show_usage", "show_battery", "idle_show_last":
                 clean[key] = .bool(try flag(value, key))
             case "font":
                 guard let font = value.string, Settings.fontChoices.contains(font) else {

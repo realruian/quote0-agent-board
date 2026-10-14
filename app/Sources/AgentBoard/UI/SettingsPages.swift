@@ -31,6 +31,7 @@ struct DisplayPage: View {
                     model.apply(["max_rows": JSON($0)])
                 }
                 Row("空闲时显示上次完成的对话", isOn: model.flag("idle_show_last", \.idleShowLast))
+                Row("显示设备电量", "在屏幕右上角，插电时有闪电标记；低于 20% 时反色提醒充电", isOn: model.flag("show_battery", \.showBattery))
             } footer: {
                 Text("画面会经过 MindReset 的服务器发到设备。额度的显示在「用量」里，显示哪些对话在「对话」里。")
             }

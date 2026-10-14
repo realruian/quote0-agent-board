@@ -227,4 +227,24 @@ final class ViewTests: BoardTestCase {
         let idle = { (u: Usage) in render(buildView(sampleBoard("idle", now: now), now: now, usage: u)) }
         XCTAssertNotEqual(idle(usage(now + 50 * 60)), idle(usage(0)))
     }
+
+    func testTheDevicesChargeSitsInTheCornerAndRefreshesInTenPointSteps() {
+        XCTAssertEqual(DotAPI.power(["status": ["battery": "86%"]]), DevicePower(percent: 86, plugged: false))
+        XCTAssertEqual(DotAPI.power(["status": ["battery": "已连接电源"]]), DevicePower(percent: nil, plugged: true))
+        XCTAssertNil(DotAPI.power(["status": ["current": "休眠中"]]))
+        let board = sampleBoard("list", now: 5)
+        func at(_ percent: Int?, plugged: Bool = false, _ change: (inout Settings) -> Void = { _ in }) -> FrameView {
+            buildView(board, now: 5, settings: settings(change), power: DevicePower(percent: percent, plugged: plugged))
+        }
+        XCTAssertEqual(at(86).signature, at(81).signature)
+        XCTAssertNotEqual(at(86).signature, at(79).signature)
+        XCTAssertNotEqual(at(86).signature, at(nil, plugged: true).signature)
+        XCTAssertNotEqual(render(at(86)), render(at(12)))  // low: in reverse
+        XCTAssertNil(at(86) { $0.showBattery = false }.power)
+        XCTAssertEqual(render(at(86) { $0.showBattery = false }), render(buildView(board, now: 5)))
+        for kind in ["wait", "idle"] {
+            XCTAssertNotEqual(render(buildView(sampleBoard(kind, now: 5), now: 5, power: DevicePower(percent: 50, plugged: false))),
+                              render(buildView(sampleBoard(kind, now: 5), now: 5)))
+        }
+    }
 }

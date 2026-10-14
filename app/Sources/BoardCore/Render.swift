@@ -437,9 +437,49 @@ public func render(_ view: FrameView) -> Frame {
     return Frame(pixels: Array(UnsafeBufferPointer(start: canvas.pixels, count: frameWidth * frameHeight)))
 }
 
-private func header(_ c: Canvas, _ right: String) {
+/// The top bar's name on the left and a word on the right, which ends at `end`.
+private func header(_ c: Canvas, _ right: String, end: Int = frameWidth - margin) {
     c.text(margin, barY, "AGENTS", c.font(small, bold: true))
-    if !right.isEmpty { c.text(frameWidth - margin, barY, right, c.font(small), .right) }
+    if !right.isEmpty { c.text(end, barY, right, c.font(small), .right) }
+}
+
+private let bolt = ["...##", "..##.", ".##..", "#####", "..##.", ".##..", "##..."]
+
+/// The device's charge in the top right corner: the figure, then a battery filled to it, with
+/// a bolt in front while on power. In reverse when it wants charging. Returns where the rest
+/// of the bar has to end.
+private func powerMark(_ c: Canvas, _ power: DevicePower) -> Int {
+    let font = c.font(small)
+    let figure = power.percent.map { "\($0)%" } ?? ""
+    let body = 14, nub = 2, height = 8
+    let pad = power.low ? alarmPad : 0
+    let figureWidth = figure.isEmpty ? 0 : c.length(figure, font) + 3
+    let boltWidth = power.plugged ? bolt[0].count + 3 : 0
+    let right = frameWidth - margin
+    let left = right - (boltWidth + figureWidth + body + nub + 2 * pad) + 1
+    if power.low { c.reverse(left, barY - 7, right, barY + 6) }
+    let value = power.low ? c.paper : c.ink
+    var x = left + pad
+    if power.plugged {
+        for (dy, row) in bolt.enumerated() {
+            for (dx, cell) in row.enumerated() where cell == "#" { c.dot(x + dx, barY - 3 + dy, value) }
+        }
+        x += boltWidth
+    }
+    if !figure.isEmpty {
+        c.text(x, barY, figure, font, value: value)
+        x += figureWidth
+    }
+    let top = barY - height / 2, bottom = top + height - 1
+    c.fill(x, top, x + body - 1, top, value)
+    c.fill(x, bottom, x + body - 1, bottom, value)
+    c.fill(x, top, x, bottom, value)
+    c.fill(x + body - 1, top, x + body - 1, bottom, value)
+    c.fill(x + body, top + 2, x + body + nub - 1, bottom - 2, value)
+    let level = power.percent ?? (power.plugged ? 100 : 0)
+    let filled = Int((Double(body - 4) * Double(level) / 100).rounded())
+    if filled > 0 { c.fill(x + 2, top + 2, x + 1 + filled, bottom - 2, value) }
+    return left - gap
 }
 
 /// Text in reverse, on a black box that reaches `pad` dots past it on either side.
@@ -454,7 +494,7 @@ private let alarmPad = 2
 /// Top bar while agents are working: per agent its mark, then what is left of each
 /// window and when that window resets, e.g. `5h 36% 14:30  7d 73% 周六`. A window
 /// that will run out before it resets says when instead, in reverse: `5h 36% 13:20用完`.
-private func quotaHeader(_ c: Canvas, _ quota: [QuotaEntry]) {
+private func quotaHeader(_ c: Canvas, _ quota: [QuotaEntry], end: Int = frameWidth - margin) {
     let font = c.font(small)
 
     // resets: 2 = every window shows its reset, 1 = only the first of each agent, 0 = none
@@ -480,12 +520,12 @@ private func quotaHeader(_ c: Canvas, _ quota: [QuotaEntry]) {
         }
     }
 
-    let fits = { (agents: [[(text: String, alarm: Bool)]]) in agents.reduce(0) { $0 + iconSize + 4 + width($1) } + gap <= frameWidth - 2 * margin }
+    let fits = { (agents: [[(text: String, alarm: Bool)]]) in agents.reduce(0) { $0 + iconSize + 4 + width($1) } + gap <= end - margin }
     let parts = [2, 1, 0].map(texts).first(where: fits) ?? texts(0)
     let top = barY - iconSize / 2
     c.mark(margin, top, quota[0].agent, c.ink)
     draw(parts[0], from: margin + iconSize + 4)
-    let rightX = frameWidth - margin - width(parts[1])
+    let rightX = end - width(parts[1])
     draw(parts[1], from: rightX)
     c.mark(rightX - 4 - iconSize, top, quota[1].agent, c.ink)
 }
@@ -525,7 +565,7 @@ private func quotaPanel(_ c: Canvas, _ quota: [QuotaEntry]) {
 private func draw(_ view: FrameView, on c: Canvas) {
     switch view.kind {
     case .wait:
-        header(c, view.since)
+        header(c, view.since, end: view.power.map { powerMark(c, $0) } ?? frameWidth - margin)
         c.text(margin, 52, view.title, c.font(titleSize, bold: true))
         let nameX = c.tag(margin, 98, view.agent, solid: true) + gap
         let nameFont = c.font(waitNameSize, bold: true)
@@ -546,10 +586,11 @@ private func draw(_ view: FrameView, on c: Canvas) {
     }
 
     let quota = view.quota ?? []
+    let end = view.power.map { powerMark(c, $0) } ?? frameWidth - margin
     if view.kind == .list, !quota.isEmpty {
-        quotaHeader(c, quota)
+        quotaHeader(c, quota, end: end)
     } else {
-        header(c, view.kind == .idle ? "空闲" : view.summary)
+        header(c, view.kind == .idle ? "空闲" : view.summary, end: end)
     }
     // Conversations that did not fit are counted at the end of the rule.
     var ruleEnd = frameWidth - margin

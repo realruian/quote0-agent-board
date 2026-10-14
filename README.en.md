@@ -30,6 +30,7 @@ The feature set is modelled on [Vibe Island](https://vibeisland.app) for the Mac
 - **Three screens, switched automatically**: a list while conversations are running, a full-screen inverted alert when one needs you, and your remaining quota when everything is idle.
 - **Conversation names**: the same names you see in the Claude and Codex sidebars, rather than a folder name or the text of your prompt.
 - **Remaining quota**: percentage left and reset time for the 5-hour and weekly windows.
+- **The device's charge**: the top right corner shows Quote/0's own battery, with a bolt while on power, in reverse below 20% to say it wants charging. The app asks MindReset for the device's status every 5 minutes, and the screen only refreshes for it every 10 points. It can be turned off on the 画面 page.
 - **Refreshing designed for e-ink**: the screen only refreshes when something changed, and changes close together are merged, so it does not keep flashing.
 - **An ordinary Mac app**: drag it into Applications and it works, with no Python needed. Choose the font, the alerts and quiet hours in its window, with a live preview.
 - **Menu bar and Dock icons**: they show whether the board is healthy and how many conversations are waiting for you; the menu bar icon's menu shows the frame on the screen and lets you pause or quit.
@@ -181,7 +182,7 @@ Settings are in the app's window: click the Dock icon, or choose "打开设置�
 | Page | What you can do |
 |---|---|
 | 总览 Overview | See the current frame, whether the screen and the device are fine, and the active conversations; refresh the screen |
-| 画面 Screen | How the screen looks: font, conversation names, number of rows, the last finished conversation when idle |
+| 画面 Screen | How the screen looks: font, conversation names, number of rows, the last finished conversation when idle, the device's charge |
 | 提醒 Alerts | Which situations take over the screen, and whether the alert names the tool to approve |
 | 对话 Conversations | Connect or disconnect Claude Code and Codex, how long conversations stay, project aliases and hidden projects |
 | 用量 Usage | Whether the screen shows quota (both looks previewed side by side), and the current readings for Claude and Codex |

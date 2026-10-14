@@ -71,6 +71,10 @@ public final class Engine {
     var testUntil = 0.0
     var farewellUntil = 0.0
     public private(set) var usage: Usage?
+    /// The device's charge as its status last gave it.
+    public private(set) var power: DevicePower?
+    var powerReadAt = 0.0
+    static let powerEvery = 5.0 * 60
     private var seenEvents: Set<String> = []
     private var namesReadAt = 0.0
     /// Per Codex conversation, whether the turn it is in has Codex review its own permission requests.
@@ -188,7 +192,7 @@ public final class Engine {
             if now < farewellUntil { return .notice("已退出", "打开 Quote0 Agent 状态牌恢复", font: settings.font) }
             if settings.paused { return .notice("已暂停", "在菜单栏里恢复", font: settings.font) }
             if Engine.inQuietHours(settings, now: now) { return .notice("夜间免打扰", "\(settings.quietHours.end) 恢复", font: settings.font) }
-            return buildView(board, now: now, settings: settings, usage: usage)
+            return buildView(board, now: now, settings: settings, usage: usage, power: power)
         }
     }
 
@@ -446,6 +450,7 @@ public final class Engine {
             Log.warning("could not check what the device is showing: \(describe(error))")
             return
         }
+        notePower(status)
         if missed {
             if !DotAPI.asleep(status) {
                 Log.info("the device is awake again; sending the frame it missed")
@@ -457,12 +462,36 @@ public final class Engine {
         }
     }
 
+    /// Ask the device for its charge every few minutes, while the screen shows it.
+    func readPower() {
+        let (settings, due): (Settings, Bool) = locked {
+            (self.settings, !dryRun && self.settings.ready && self.settings.showBattery && now() - powerReadAt >= Engine.powerEvery)
+        }
+        guard due else { return }
+        locked { powerReadAt = now() }
+        do {
+            notePower(try DotAPI.getStatus(settings))
+        } catch {
+            Log.warning("could not read the device's charge: \(describe(error))")
+        }
+    }
+
+    /// Keep the charge a status reports. A status that does not say keeps the one before.
+    func notePower(_ status: JSON) {
+        guard let reading = DotAPI.power(status) else { return }
+        locked {
+            powerReadAt = now()
+            power = reading
+        }
+    }
+
     /// Sessions age off the board and quota moves without any event; re-check periodically.
     private func ticker() {
         var beat = 0
         while true {
             if beat > 0 { readUsage() }  // the first reading is taken before the threads start
             if beat % 2 == 1 { checkScreen() }
+            readPower()
             beat += 1
             raise(dirty: true)
             onChange?()
@@ -477,6 +506,7 @@ public final class Engine {
         raise(names: true)
         let starter = Thread { [self] in
             readUsage()  // before the first frame, so it does not go out without quota; asking Claude can take seconds
+            readPower()
             for (name, body) in [("pusher", pusher), ("ticker", ticker), ("namer", namer)] {
                 let thread = Thread(block: body)
                 thread.name = name
