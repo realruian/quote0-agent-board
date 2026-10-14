@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.3.1] - 2026-10-15
+
 ### 变更
 
 - App 改名为「Quote0 Agent 状态牌」，安装包改名为 `Quote0-Agent-Board-<版本>.dmg`，一眼能看出是给 Quote/0 用的。从旧版升级时，先在旧 App 的菜单里退出，再把「应用程序」里的「Agent 状态牌」拖进废纸篓，然后装新版。
@@ -72,5 +74,6 @@
 - 通过 MindReset 图像 API 推送，状态变化才刷新。
 - 安装和卸载脚本，改动的文件都先备份。
 
+[0.3.1]: https://github.com/realruian/quote0-agent-board/releases/tag/v0.3.1
 [0.3.0]: https://github.com/realruian/quote0-agent-board/releases/tag/v0.3.0
 [0.2.0]: https://github.com/realruian/quote0-agent-board/releases/tag/v0.2.0
