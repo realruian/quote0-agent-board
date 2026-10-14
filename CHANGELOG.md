@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.4.0] - 2026-10-15
+
 ### 新增
 
 - 额度会在重置前用完时提醒：按最近的用量推算（5 小时额度看最近 1 小时，每周额度看最近 1 天），总览顶栏里那一项反色并显示大约几点用完，空闲画面最后一行换成“Claude 5 小时额度约 11:00 用完，14:30 才重置”。
@@ -83,6 +85,7 @@
 - 通过 MindReset 图像 API 推送，状态变化才刷新。
 - 安装和卸载脚本，改动的文件都先备份。
 
+[0.4.0]: https://github.com/realruian/quote0-agent-board/releases/tag/v0.4.0
 [0.3.1]: https://github.com/realruian/quote0-agent-board/releases/tag/v0.3.1
 [0.3.0]: https://github.com/realruian/quote0-agent-board/releases/tag/v0.3.0
 [0.2.0]: https://github.com/realruian/quote0-agent-board/releases/tag/v0.2.0
