@@ -75,6 +75,7 @@ public final class Engine {
     public private(set) var power: DevicePower?
     var powerReadAt = 0.0
     static let powerEvery = 5.0 * 60
+    static let powerRetry = 60.0
     private var seenEvents: Set<String> = []
     private var namesReadAt = 0.0
     /// Per Codex conversation, whether the turn it is in has Codex review its own permission requests.
@@ -471,8 +472,10 @@ public final class Engine {
         locked { powerReadAt = now() }
         do {
             notePower(try DotAPI.getStatus(settings))
+            raise(dirty: true)
         } catch {
             Log.warning("could not read the device's charge: \(describe(error))")
+            locked { powerReadAt = now() - Engine.powerEvery + Engine.powerRetry }  // a network that wobbled: try again soon
         }
     }
 
