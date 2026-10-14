@@ -35,7 +35,7 @@ enum Install {
         let path = Bundle.main.bundlePath
         guard path.hasSuffix(".app") else { return nil }  // a development build run from the build folder
         if path.contains("/AppTranslocation/") || path.hasPrefix("/Volumes/") {
-            return "请先把「Agent 状态牌」拖进「应用程序」文件夹，再从那里打开。"
+            return "请先把「Quote0 Agent 状态牌」拖进「应用程序」文件夹，再从那里打开。"
         }
         return nil
     }

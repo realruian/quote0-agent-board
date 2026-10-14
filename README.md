@@ -74,7 +74,7 @@
 
 ```mermaid
 flowchart TB
-    A["Claude Code<br>Codex"] -- "钩子事件" --> C["Agent 状态牌 App"]
+    A["Claude Code<br>Codex"] -- "钩子事件" --> C["Quote0 Agent 状态牌 App"]
     C -- "黑白图" --> D["MindReset<br>图像 API"]
     D --> E["Quote/0"]
 ```
@@ -101,7 +101,7 @@ flowchart TB
 
 ### 2. 下载并打开 App
 
-从 [Releases](https://github.com/realruian/quote0-agent-board/releases/latest) 下载 `Agent-Board-<版本>.dmg`（约 9 MB，同时支持 Apple 芯片和 Intel），打开后把「Agent 状态牌」拖进「应用程序」，从那里打开。
+从 [Releases](https://github.com/realruian/quote0-agent-board/releases/latest) 下载 `Quote0-Agent-Board-<版本>.dmg`（约 9 MB，同时支持 Apple 芯片和 Intel），打开后把「Quote0 Agent 状态牌」拖进「应用程序」，从那里打开。
 
 这个 App **没有签名**，第一次打开会被 macOS 拦一下：在提示里点「完成」，到「系统设置 → 隐私与安全性」里点「仍要打开」，再打开一次。DMG 里的「先看这里.txt」写了步骤。
 
@@ -116,7 +116,7 @@ cd quote0-agent-board
 python3 scripts/build_app.py
 ```
 
-会生成 `dist/Agent 状态牌.app` 和 `dist/Agent-Board-<版本>.dmg`。装了完整的 Xcode 时同时支持 Apple 芯片和 Intel，只有命令行工具时只支持本机的芯片。自己构建的 App 不会被 macOS 拦。
+会生成 `dist/Quote0 Agent 状态牌.app` 和 `dist/Quote0-Agent-Board-<版本>.dmg`。装了完整的 Xcode 时同时支持 Apple 芯片和 Intel，只有命令行工具时只支持本机的芯片。自己构建的 App 不会被 macOS 拦。
 
 </details>
 
@@ -164,7 +164,7 @@ python3 scripts/build_app.py
 
 刷新和暂停在程序坞图标的右键菜单里也有。两个图标都可以不留：
 
-- **菜单栏图标**：在窗口的「关于」页或屏幕顶部的「Agent 状态牌」菜单里取消「在菜单栏显示图标」。
+- **菜单栏图标**：在窗口的「关于」页或屏幕顶部的「Quote0 Agent 状态牌」菜单里取消「在菜单栏显示图标」。
 - **程序坞图标**：在同样的两个地方取消「关闭窗口后保留程序坞图标」。之后窗口一关，程序坞里的图标就消失；再打开窗口时图标回来。
 
 两个图标互不影响。都不留时状态牌照常在后台工作，在启动台、Spotlight 或访达里再打开一次 App，窗口就回来。
@@ -230,13 +230,13 @@ python3 scripts/build_app.py
 
 更新到最新版本：先在菜单栏里退出 App，从 [Releases](https://github.com/realruian/quote0-agent-board/releases/latest) 下载新的 DMG，用里面的 App 替换「应用程序」里的旧的，然后打开。设置和钩子都会保留。
 
-卸载：在屏幕顶部的「Agent 状态牌」菜单里选「卸载…」，或者在窗口的「关于」页里点卸载，然后把 App 拖进废纸篓。卸载会移除钩子、取消开机自启，并把设备的轮播间隔恢复原值。设置和日志会留在 `~/.quote0-agent-board/`，不想要的话手动删掉这个文件夹。
+卸载：在屏幕顶部的「Quote0 Agent 状态牌」菜单里选「卸载…」，或者在窗口的「关于」页里点卸载，然后把 App 拖进废纸篓。卸载会移除钩子、取消开机自启，并把设备的轮播间隔恢复原值。设置和日志会留在 `~/.quote0-agent-board/`，不想要的话手动删掉这个文件夹。
 
 ## 文件位置
 
 | 位置 | 内容 |
 |---|---|
-| `/Applications/Agent 状态牌.app` | App |
+| `/Applications/Quote0 Agent 状态牌.app` | App |
 | `~/.quote0-agent-board/config.json` | 设置 |
 | `~/.quote0-agent-board/logs/daemon.log` | 日志 |
 | `~/.quote0-agent-board/last-frame.png` | 最近一次推送的画面 |

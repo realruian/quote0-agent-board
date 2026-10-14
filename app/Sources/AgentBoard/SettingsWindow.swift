@@ -59,7 +59,7 @@ final class SettingsWindow {
         window.toolbarStyle = .unified
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.title = "Agent 状态牌"
+        window.title = "Quote0 Agent 状态牌"
         window.isReleasedWhenClosed = false  // closing it leaves the board running; it opens again from the Dock or the menu bar
         window.setContentSize(NSSize(width: 920, height: 660))
         window.center()

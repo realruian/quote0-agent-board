@@ -3,7 +3,7 @@
 
     python3 scripts/build_app.py
 
-Leaves `dist/Agent 状态牌.app` and `dist/Agent-Board-<version>.dmg`. The app is
+Leaves `dist/Quote0 Agent 状态牌.app` and `dist/Quote0-Agent-Board-<version>.dmg`. The app is
 compiled for both Apple silicon and Intel when the toolchain can, and signed
 ad hoc: there is no developer certificate behind it, so macOS asks whoever
 downloads it to allow it once. The note inside the disk image says how.
@@ -22,7 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
-NAME = "Agent 状态牌"
+NAME = "Quote0 Agent 状态牌"
 IDENTIFIER = "com.quote0.agent-board.menubar"  # app/Sources/AgentBoard/Install.swift has the same
 VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / "agent_board" / "__init__.py").read_text()).group(1)
 
@@ -39,7 +39,7 @@ FIRST_OPEN = f"""安装
 
 打开后会出现「连接设备」页面，照着填密钥、选设备即可。
 
-卸载：打开 App，在屏幕顶部的「Agent 状态牌」菜单里选「卸载…」，再把 App 拖进废纸篓。
+卸载：打开 App，在屏幕顶部的「{NAME}」菜单里选「卸载…」，再把 App 拖进废纸篓。
 
 源代码：https://github.com/realruian/quote0-agent-board
 """
@@ -96,7 +96,7 @@ def bundle(binary: Path) -> Path:
 
 
 def disk_image(app: Path) -> Path:
-    image = DIST / f"Agent-Board-{VERSION}.dmg"
+    image = DIST / f"Quote0-Agent-Board-{VERSION}.dmg"
     image.unlink(missing_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp) / NAME

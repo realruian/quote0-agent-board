@@ -104,7 +104,7 @@ It is best to keep Image API as the only item in the loop. When the device rotat
 
 ### 2. Download the app and open it
 
-Download `Agent-Board-<version>.dmg` from [Releases](https://github.com/realruian/quote0-agent-board/releases/latest) (about 9 MB, for both Apple silicon and Intel), open it, drag Agent 状态牌 into Applications, and open it from there.
+Download `Quote0-Agent-Board-<version>.dmg` from [Releases](https://github.com/realruian/quote0-agent-board/releases/latest) (about 9 MB, for both Apple silicon and Intel), open it, drag Quote0 Agent 状态牌 into Applications, and open it from there.
 
 The app is **not signed**, so macOS blocks it the first time: click Done in the prompt, allow it under System Settings → Privacy & Security → Open Anyway, and open it once more. The note inside the disk image has the steps.
 
@@ -119,7 +119,7 @@ cd quote0-agent-board
 python3 scripts/build_app.py
 ```
 
-This leaves `dist/Agent 状态牌.app` and `dist/Agent-Board-<version>.dmg`, for both Apple silicon and Intel when the full Xcode is installed, and for this machine's processor only with just the command line tools. macOS does not block an app you built yourself.
+This leaves `dist/Quote0 Agent 状态牌.app` and `dist/Quote0-Agent-Board-<version>.dmg`, for both Apple silicon and Intel when the full Xcode is installed, and for this machine's processor only with just the command line tools. macOS does not block an app you built yourself.
 
 </details>
 
@@ -239,7 +239,7 @@ To uninstall: choose 卸载… from the app's menu at the top of the screen, or 
 
 | Location | Contents |
 |---|---|
-| `/Applications/Agent 状态牌.app` | The app |
+| `/Applications/Quote0 Agent 状态牌.app` | The app |
 | `~/.quote0-agent-board/config.json` | Settings |
 | `~/.quote0-agent-board/logs/daemon.log` | Log |
 | `~/.quote0-agent-board/last-frame.png` | The most recently pushed frame |

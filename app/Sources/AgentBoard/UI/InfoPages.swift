@@ -43,7 +43,7 @@ struct DiagnosticsPage: View {
             }
         }
         .onAppear(perform: model.loadLog)
-        .confirmationDialog("重新启动 Agent 状态牌？", isPresented: $confirmingRestart) {
+        .confirmationDialog("重新启动 Quote0 Agent 状态牌？", isPresented: $confirmingRestart) {
             Button("重新启动") { model.console.restart() }
         } message: {
             Text("几秒钟后恢复，期间状态牌不更新。")
@@ -81,7 +81,7 @@ struct AboutPage: View {
                 link("源代码", "https://github.com/realruian/quote0-agent-board")
             }
             Card("卸载") {
-                Row("卸载 Agent 状态牌", "之后把 App 拖进废纸篓即可") {
+                Row("卸载 Quote0 Agent 状态牌", "之后把 App 拖进废纸篓即可") {
                     Button("卸载…", role: .destructive, action: model.uninstall)
                 }
             } footer: {

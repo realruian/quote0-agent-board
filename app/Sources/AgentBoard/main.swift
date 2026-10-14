@@ -1,4 +1,4 @@
-// Agent 状态牌: the Quote/0 agent status board as a Mac app.
+// Quote0 Agent 状态牌: the Quote/0 agent status board as a Mac app.
 //
 // The app is in the Dock and has one window, which holds the settings (see UI/). The
 // board itself works in the background, so there is also an icon in the menu bar,
@@ -160,15 +160,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return holder
         }
         let bar = NSMenu()
-        bar.addItem(menu("Agent 状态牌", [
+        bar.addItem(menu("Quote0 Agent 状态牌", [
             item("设置…", #selector(openSettings), ",", target: self), .separator(),
             item("刷新屏幕", #selector(refreshScreen), "r", target: self),
             item("暂停", #selector(togglePause), target: self), .separator(),
             item("在菜单栏显示图标", #selector(toggleMenuBarIcon), target: self),
             item("关闭窗口后保留程序坞图标", #selector(toggleDockIcon), target: self),
             item("卸载…", Paths.isDevelopment ? nil : #selector(uninstall), target: self), .separator(),
-            item("隐藏 Agent 状态牌", #selector(NSApplication.hide(_:)), "h"), .separator(),
-            item("退出 Agent 状态牌", #selector(NSApplication.terminate(_:)), "q"),
+            item("隐藏 Quote0 Agent 状态牌", #selector(NSApplication.hide(_:)), "h"), .separator(),
+            item("退出 Quote0 Agent 状态牌", #selector(NSApplication.terminate(_:)), "q"),
         ]))
         bar.addItem(menu("编辑", [
             item("撤销", Selector(("undo:")), "z"), item("重做", Selector(("redo:")), "Z"), .separator(),
@@ -245,7 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return true
         }
         image.isTemplate = true
-        image.accessibilityDescription = "Agent 状态牌"
+        image.accessibilityDescription = "Quote0 Agent 状态牌"
         return image
     }
 
@@ -265,7 +265,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         button.imagePosition = .imageLeading
         // How many conversations are waiting for the user: the thing the board exists to say.
         button.title = waiting > 0 ? " \(waiting)" : ""
-        button.toolTip = "Agent 状态牌：\(line)"
+        button.toolTip = "Quote0 Agent 状态牌：\(line)"
         // The same count on the Dock icon, when it is there.
         NSApp.dockTile.badgeLabel = waiting > 0 ? "\(waiting)" : nil
     }
@@ -417,7 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func uninstall() {
         let text = "会断开 Claude Code 和 Codex、取消开机自启，并把设备的循环间隔恢复原样。设置和日志会保留。"
-        guard alert("卸载 Agent 状态牌？", text, buttons: ["卸载", "取消"]) == 0 else { return }
+        guard alert("卸载 Quote0 Agent 状态牌？", text, buttons: ["卸载", "取消"]) == 0 else { return }
         statusItem.button?.appearsDisabled = true
         saidFarewell = true
         DispatchQueue.global().async { [self] in
@@ -425,7 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             hooks.stop()
             Install.remove(console: console)
             DispatchQueue.main.async {
-                self.alert("已卸载", "现在可以把「Agent 状态牌」拖进废纸篓。")
+                self.alert("已卸载", "现在可以把「Quote0 Agent 状态牌」拖进废纸篓。")
                 Install.launchctl("bootout", "\(Install.domain)/\(Install.label)")  // ends this process when launchd started it
                 exit(0)
             }

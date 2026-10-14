@@ -185,7 +185,7 @@ public final class Engine {
                 view.note = String(format: "%02d:%02d:%02d 发送", sent.hour ?? 0, sent.minute ?? 0, sent.second ?? 0)
                 return view
             }
-            if now < farewellUntil { return .notice("已退出", "打开 Agent 状态牌恢复", font: settings.font) }
+            if now < farewellUntil { return .notice("已退出", "打开 Quote0 Agent 状态牌恢复", font: settings.font) }
             if settings.paused { return .notice("已暂停", "在菜单栏里恢复", font: settings.font) }
             if Engine.inQuietHours(settings, now: now) { return .notice("夜间免打扰", "\(settings.quietHours.end) 恢复", font: settings.font) }
             return buildView(board, now: now, settings: settings, usage: usage)

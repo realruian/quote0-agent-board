@@ -67,7 +67,7 @@ public enum DotAPI {
     public static func pushImage(_ settings: Settings, _ png: Data, blackBorder: Bool = false) throws -> String {
         let result = try device(settings, "POST", "image", body: [
             "taskType": "loop", "refreshNow": true, "image": .string(png.base64EncodedString()),
-            "border": blackBorder ? 1 : 0, "ditherType": "NONE", "taskAlias": "Agent 状态牌",
+            "border": blackBorder ? 1 : 0, "ditherType": "NONE", "taskAlias": "Quote0 Agent 状态牌",
         ])
         return result["message"]?.string ?? ""
     }
