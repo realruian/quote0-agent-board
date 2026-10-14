@@ -197,6 +197,8 @@ Only fonts present on the machine are offered: PingFang (default), MiSans, Hirag
 
 Quota comes from Codex and Claude Code themselves. The project does not log in to any account and does not read any credentials.
 
+To leave quota off the screen, pick 不显示额度 (no quota) under 剩余额度 on the 画面 page, where both looks are previewed side by side. The top bar then counts conversations by state, the idle screen shows only the last finished conversation, and the app stops reading quota.
+
 | | Source | Trusted for |
 |---|---|---|
 | Codex | The conversation records Codex writes under `~/.codex/sessions/` | Until the reset time, after which the window counts as full again |

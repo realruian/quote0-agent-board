@@ -387,8 +387,8 @@ public final class Console {
         }
         _ = render(buildView(sampleBoard("wait")))
         add("画面生成", !Fonts.available().isEmpty, Fonts.available().isEmpty ? "没有找到可用的中文字体" : "字体可用")
-        let usage = engine.usage
-        for (agent, label) in [("claude", "Claude 额度数据"), ("codex", "Codex 额度数据")] {
+        let (usage, showUsage) = engine.locked { (engine.usage, engine.settings.showUsage) }
+        for (agent, label) in showUsage ? [("claude", "Claude 额度数据"), ("codex", "Codex 额度数据")] : [] {
             let reading = usage?[agent] ?? AgentUsage()
             if !reading.windows.isEmpty {
                 add(label, true, "\(ago(now - reading.observedAt))前的读数")

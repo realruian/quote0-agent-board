@@ -549,7 +549,7 @@ private func draw(_ view: FrameView, on c: Canvas) {
     if view.kind == .list, !quota.isEmpty {
         quotaHeader(c, quota)
     } else {
-        header(c, view.kind == .idle && !quota.isEmpty ? "空闲" : view.summary)
+        header(c, view.kind == .idle ? "空闲" : view.summary)
     }
     // Conversations that did not fit are counted at the end of the rule.
     var ruleEnd = frameWidth - margin

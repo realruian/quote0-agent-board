@@ -35,9 +35,11 @@ struct OverviewPage: View {
                 .padding(.horizontal, 4)
             }
 
-            Card("剩余额度") {
-                quota("Claude", model.status.usage?["claude"], needs: "需要在终端里登录过 Claude Code")
-                quota("Codex", model.status.usage?["codex"], needs: "Codex 回复一次后就有")
+            if model.settings.showUsage {
+                Card("剩余额度") {
+                    quota("Claude", model.status.usage?["claude"], needs: "需要在终端里登录过 Claude Code")
+                    quota("Codex", model.status.usage?["codex"], needs: "Codex 回复一次后就有")
+                }
             }
 
             Card("当前对话") {

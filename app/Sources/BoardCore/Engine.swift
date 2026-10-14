@@ -203,6 +203,14 @@ public final class Engine {
             raise(dirty: true, urgent: clean["paused"] != nil)
             Log.info("settings changed: \(clean.keys.sorted().joined(separator: ", "))")
             defer { onChange?() }
+            if clean["show_usage"] != nil {
+                // read now, or drop the reading, rather than at the next tick
+                Thread { [self] in
+                    readUsage()
+                    raise(dirty: true)
+                    onChange?()
+                }.start()
+            }
             return settings
         }
     }
@@ -394,9 +402,11 @@ public final class Engine {
 
     // MARK: the ticker
 
+    /// Quota is only read while the screen shows it: asking Claude starts a process each time.
     func readUsage() {
         // A conversation picked up again after weeks is recorded in the folder of the day it began.
-        let open = locked { board.sessions.values.filter { $0.source == "codex" && !$0.transcript.isEmpty }.map(\.transcript) }
+        let (wanted, open) = locked { (settings.showUsage, board.sessions.values.filter { $0.source == "codex" && !$0.transcript.isEmpty }.map(\.transcript)) }
+        guard wanted else { return locked { usage = nil } }
         let reading = UsageReader.snapshot(codexTranscripts: open)
         locked { usage = reading }
     }

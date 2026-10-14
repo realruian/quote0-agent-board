@@ -39,11 +39,16 @@ struct DisplayPage: View {
                 }
                 Row("显示对话名称", "和 Claude、Codex 侧边栏里的名称一致；新对话先用你发的第一句话", isOn: model.flag("show_titles", \.showTitles))
                 Row("等批准时显示工具名", "例如 Bash、Edit", isOn: model.flag("show_detail", \.showDetail))
-                Row("显示剩余额度", "有 Agent 在运行时显示在顶栏，空闲时显示完整的额度条", isOn: model.flag("show_usage", \.showUsage))
                 NumberRow(title: "最多行数", detail: "对话更多时，优先显示等你处理的和最近有动静的", value: settings.maxRows, range: 1...4, unit: "行") {
                     model.apply(["max_rows": JSON($0)])
                 }
                 Row("空闲时显示上次完成的项目", isOn: model.flag("idle_show_last", \.idleShowLast))
+            }
+
+            Card("剩余额度") {
+                UsageChoice(model: model, sample: sample)
+            } footer: {
+                Text("显示时，App 每 5 分钟向本机的 claude 命令行查询一次 Claude 额度，需要在终端里登录过 Claude Code；Codex 额度读自它的对话记录。不显示时这些都不做。")
             }
 
             Card("对话保留") {
@@ -104,6 +109,56 @@ struct DisplayPage: View {
                 }))
                 .toggleStyle(.switch).controlSize(.small).foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+/// The screen with and without quota, side by side: picking one is the setting.
+private struct UsageChoice: View {
+    @ObservedObject var model: BoardModel
+    let sample: String
+    @State private var frames: [Bool: NSImage] = [:]
+
+    // the waiting screen has no quota on it, so the overview stands in for it
+    private var shown: String { sample == "wait" ? "list" : sample }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            option(true, "显示额度", shown == "idle" ? "空闲时显示各家额度条和重置时间" : "顶栏显示各家剩余额度和重置时间")
+            option(false, "不显示额度", shown == "idle" ? "空闲时只显示上次完成的对话" : "顶栏显示各状态的对话数")
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .onAppear(perform: render)
+        .onChange(of: sample) { _, _ in render() }
+        .onChange(of: model.settings) { _, _ in render() }
+    }
+
+    private func option(_ on: Bool, _ title: String, _ detail: String) -> some View {
+        let chosen = model.settings.showUsage == on
+        return Button { if !chosen { model.apply(["show_usage": .bool(on)]) } } label: {
+            VStack(spacing: 8) {
+                ScreenView(image: frames[on], maxWidth: 240)
+                HStack(spacing: 5) {
+                    if chosen { IconView(.tick02, size: 14).foregroundStyle(Color.accentColor) }
+                    Text(title).font(.system(size: 13, weight: .medium))
+                }
+                Text(detail).font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(chosen ? Color.accentColor : Tone.line, lineWidth: chosen ? 2 : 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(chosen ? [.isButton, .isSelected] : .isButton)
+    }
+
+    private func render() {
+        for on in [true, false] {
+            model.preview(sample: shown, config: ["show_usage": .bool(on)]) { frames[on] = $0 }
         }
     }
 }

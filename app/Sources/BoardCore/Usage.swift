@@ -305,7 +305,11 @@ public enum UsageReader {
 
     /// Per agent and window, percent left and reset time. An agent has no windows
     /// when there is no reading worth showing.
+    private static let reading = NSLock()  // the ticker and a change of settings may both ask
+
     public static func snapshot(now: Double = Date().timeIntervalSince1970, codexTranscripts: [String] = []) -> Usage {
+        reading.lock()
+        defer { reading.unlock() }
         let claude = readClaude(now: now), codex = readCodex(also: codexTranscripts)
         remember("claude", claude)
         remember("codex", codex)

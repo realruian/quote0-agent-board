@@ -161,9 +161,11 @@ final class BoardModel: ObservableObject {
         Binding(get: { self.settings[keyPath: value] }, set: { self.apply([key: .bool($0)]) })
     }
 
-    func preview(sample: String, done: @escaping (NSImage?) -> Void) {
+    /// A frame drawn with the saved settings, changed by `config` where given.
+    func preview(sample: String, config: JSON? = nil, done: @escaping (NSImage?) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let image = (try? self.console.preview(["sample": .string(sample)])).flatMap(NSImage.init(data:))
+            let body: JSON = config.map { ["sample": .string(sample), "config": $0] } ?? ["sample": .string(sample)]
+            let image = (try? self.console.preview(body)).flatMap(NSImage.init(data:))
             DispatchQueue.main.async { done(image) }
         }
     }

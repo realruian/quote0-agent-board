@@ -239,4 +239,13 @@ final class ConsoleTests: BoardTestCase {
         engine.sayFarewell(timeout: 0.2)
         XCTAssertEqual([engine.currentView().kind.rawValue, engine.currentView().line], ["quiet", "已退出"])
     }
+
+    func testQuotaTurnedOffIsNeitherReadNorChecked() throws {
+        _ = try engine.applyConfig(["show_usage": false])
+        engine.readUsage()
+        XCTAssertNil(engine.usage)
+        let names = console.runChecks()["results"]?.array?.compactMap { $0["name"]?.string } ?? []
+        XCTAssertFalse(names.isEmpty)
+        XCTAssertFalse(names.contains { $0.contains("额度") })
+    }
 }
