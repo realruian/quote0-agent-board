@@ -12,32 +12,32 @@ struct OverviewPage: View {
             Banners(items: banners)
 
             Card {
-                HStack(alignment: .center, spacing: 24) {
+                HStack(alignment: .center, spacing: Space.xl) {
                     ScreenView(image: model.frame, maxWidth: 300)
-                    VStack(alignment: .leading, spacing: 9) {
+                    VStack(alignment: .leading, spacing: Space.s) {
                         ForEach(Array(lines.enumerated()), id: \.offset) {
-                            StatusLine(health: $0.element.0, text: $0.element.1).font(.system(size: 15, weight: .medium))
+                            StatusLine(health: $0.element.0, text: $0.element.1).font(.emphasis)
                         }
                         if !caption.isEmpty {
-                            Text(caption).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            Text(caption).explanation().fixedSize(horizontal: false, vertical: true)
                         }
-                        deviceLine.font(.system(size: 12)).foregroundStyle(.secondary)
-                        HStack(spacing: 8) {
+                        deviceLine.explanation()
+                        HStack(spacing: Space.s) {
                             if model.status.paused { Button("恢复") { model.apply(["paused": false], quietly: true) } }
                             Button("刷新屏幕", action: model.refreshScreen).disabled(model.status.needsSetup)
                         }
-                        .padding(.top, 6)
+                        .padding(.top, Space.xs)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(.vertical, 8)
-                .padding(.horizontal, 4)
+                .padding(.vertical, Space.s)
+                .padding(.horizontal, Space.xs)
             }
 
             Card("当前对话") {
                 if model.status.sessions.isEmpty {
                     Text("现在没有对话。在 Claude Code 或 Codex 里开始一个，就会出现在这里。").foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .center).padding(.vertical, 14)
+                        .frame(maxWidth: .infinity, alignment: .center).padding(.vertical, Space.m)
                 }
                 ForEach(model.status.sessions, id: \.key) { session($0) }
             }

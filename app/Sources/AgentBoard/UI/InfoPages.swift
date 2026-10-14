@@ -27,7 +27,7 @@ struct DiagnosticsPage: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         Text(model.log.isEmpty ? "日志是空的。" : model.log.joined(separator: "\n"))
-                            .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).textSelection(.enabled)
+                            .font(.log).lineSpacing(Space.hairline).foregroundStyle(.secondary).textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading).id("end")
                     }
                     .frame(height: 250)
@@ -99,7 +99,7 @@ struct AboutPage: View {
 
     private func location(_ title: String, _ path: String?, _ url: URL) -> some View {
         Row(title) {
-            HStack(spacing: 8) {
+            HStack(spacing: Space.s) {
                 ValueText(path ?? "")
                 Button { NSWorkspace.shared.activateFileViewerSelecting([url]) } label: { IconView(.folder01) }
                     .buttonStyle(.borderless).help("在访达中显示").accessibilityLabel("在访达中显示")

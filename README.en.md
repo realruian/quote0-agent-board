@@ -56,7 +56,7 @@ One conversation per row, up to four rows. The icon on the left says which agent
 
 **Needs you**
 
-When any conversation asks for approval, asks a question or wants a plan confirmed, the whole screen inverts, with how long it has been waiting at the top right. It returns to the overview once you have dealt with it.
+When any conversation asks for approval, asks a question or wants a plan confirmed, the whole screen inverts, with how long it has been waiting at the top right. A name too long for one line takes two. It returns to the overview once you have dealt with it.
 
 </td>
 </tr>

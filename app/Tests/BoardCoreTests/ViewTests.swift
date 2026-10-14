@@ -247,4 +247,26 @@ final class ViewTests: BoardTestCase {
                               render(buildView(sampleBoard(kind, now: 5), now: 5)))
         }
     }
+
+    func testALongNameOnTheWaitingScreenTakesTwoLinesInsteadOfBeingCut() {
+        // the first line breaks between words, not inside one
+        let english = "update the README screenshots and the notes"
+        let parts = fittedSplit(english, width: 120)
+        XCTAssertEqual(parts[0] + " " + parts[1], english)
+        XCTAssertFalse(parts[0].isEmpty || parts[1].isEmpty)
+        let name = "应用名称加入 quote0 产品标识，并更新 README 里的截图"
+        let lines = fittedSplit(name, width: 200)
+        XCTAssertTrue(name.hasPrefix(lines[0]) && name.hasSuffix(lines[1]))  // nothing lost between the two
+        XCTAssertLessThanOrEqual(textWidth(lines[0], family: "pingfang", size: 16, bold: true), 200)
+        func wait(_ task: String) -> Frame {
+            let b = Board()
+            b.apply("claude", "UserPromptSubmit", alpha.with(["prompt": .string(task)]), now: 1)
+            b.apply("claude", "PermissionRequest", alpha.with(["tool_name": "Bash"]), now: 2)
+            return render(buildView(b, now: 3))
+        }
+        // a second line is drawn below where one line would end
+        func inked(_ frame: Frame, row: Int) -> Bool { (16..<frameWidth).contains { frame.pixels[row * frameWidth + $0] == 255 } }
+        XCTAssertFalse(inked(wait("修复登录 bug"), row: 116))
+        XCTAssertTrue(inked(wait("应用名称加入 quote0 产品标识，并更新 README 里的截图和说明文字"), row: 116))
+    }
 }

@@ -50,10 +50,10 @@ struct PageView<Pinned: View, Content: View>: View {
                     pinned
                 }
                 .padding(.top, PageView.bar)
-                .padding(.bottom, 16)
+                .padding(.bottom, Space.l)
                 Rectangle().fill(Tone.line).frame(height: 1)
                 ScrollView {
-                    column { content }.padding(.top, 22).padding(.bottom, 44)
+                    column { content }.padding(.top, Space.xl).padding(.bottom, Space.xxl + Space.l)
                 }
             }
         } else {
@@ -63,7 +63,7 @@ struct PageView<Pinned: View, Content: View>: View {
                     content
                 }
                 .padding(.top, PageView.bar)
-                .padding(.bottom, 44)
+                .padding(.bottom, Space.xxl + Space.l)
             }
             // The window's bar lies over the top of the page and takes the clicks there, so what scrolls
             // under it fades out rather than staying in view where it cannot be pressed.
@@ -75,8 +75,8 @@ struct PageView<Pinned: View, Content: View>: View {
     }
 
     private var heading: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(page.title).font(.system(size: 22, weight: .semibold))
+        VStack(alignment: .leading, spacing: Space.xs) {
+            Text(page.title).font(.pageTitle)
             Text(page.summary).foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
@@ -84,9 +84,9 @@ struct PageView<Pinned: View, Content: View>: View {
     }
 
     private func column<Inner: View>(@ViewBuilder _ inner: () -> Inner) -> some View {
-        VStack(alignment: .leading, spacing: 26) { inner() }
+        VStack(alignment: .leading, spacing: Space.xl) { inner() }
             .frame(maxWidth: 660, alignment: .leading)
-            .padding(.horizontal, 36)
+            .padding(.horizontal, Space.xxl)
             .frame(maxWidth: .infinity)
     }
 }
@@ -112,15 +112,15 @@ struct Card<Content: View, Footer: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Space.s) {
             if let title = title {
-                Text(title).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary).padding(.leading, 2)
+                Text(title).font(.label).foregroundStyle(.secondary).padding(.leading, Space.hairline)
                     .accessibilityAddTraits(.isHeader)
             }
             _VariadicView.Tree(Rows()) { content }
                 .background(Tone.wash, in: shape)
                 .overlay(shape.strokeBorder(Tone.line))
-            footer.font(.system(size: 12)).foregroundStyle(.secondary).padding(.leading, 2)
+            footer.explanation().padding(.leading, Space.hairline)
         }
     }
 }
@@ -136,8 +136,8 @@ private struct Rows: _VariadicView_UnaryViewRoot {
     func body(children: _VariadicView.Children) -> some View {
         VStack(spacing: 0) {
             ForEach(children) { child in
-                if child.id != children.first?.id { Rectangle().fill(Tone.line).frame(height: 1).padding(.horizontal, 14) }
-                child.padding(.horizontal, 14).padding(.vertical, 10).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                if child.id != children.first?.id { Rectangle().fill(Tone.line).frame(height: 1).padding(.horizontal, Space.l) }
+                child.padding(.horizontal, Space.l).padding(.vertical, Space.m).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
         }
     }
@@ -158,13 +158,13 @@ struct Row<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(spacing: Space.l) {
+            HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                 if let health = health { Dot(health: health).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1.5 } }
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: Space.hairline) {
                     Text(title)
                     if let detail = detail, !detail.isEmpty {
-                        Text(detail).font(.system(size: 12)).foregroundStyle(.secondary)
+                        Text(detail).explanation()
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -197,7 +197,7 @@ struct ValueText: View {
     }
 
     var body: some View {
-        Text(text).foregroundStyle(.secondary).multilineTextAlignment(.trailing).textSelection(.enabled)
+        Text(text).monospacedDigit().foregroundStyle(.secondary).multilineTextAlignment(.trailing).textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
     }
 }

@@ -316,6 +316,23 @@ private final class Canvas {
         }
     }
 
+    /// As much of `text` as fills one line, and the rest. A Latin word is not cut in two
+    /// when there is a space to break at instead.
+    func split(_ text: String, _ font: CTFont, _ maxWidth: Int) -> (String, String) {
+        var first = ""
+        for character in text {
+            if length(first + String(character), font) > maxWidth { break }
+            first.append(character)
+        }
+        var rest = String(text.dropFirst(first.count))
+        if let next = rest.first, let last = first.last, next.isASCII && next.isLetter && last.isASCII && last.isLetter,
+           let space = first.lastIndex(of: " "), first.distance(from: first.startIndex, to: space) > first.count / 2 {
+            rest = String(first[first.index(after: space)...]) + rest
+            first = String(first[..<space])
+        }
+        return (first, rest.trimmingCharacters(in: .whitespaces))
+    }
+
     func fit(_ text: String, _ font: CTFont, _ maxWidth: Int) -> String {
         if length(text, font) <= maxWidth { return text }
         var text = text
@@ -419,6 +436,12 @@ public struct Frame: Equatable {
 func textWidth(_ text: String, family: String, size: Int, bold: Bool) -> Int {
     let canvas = Canvas(family: family, inverted: false)
     return canvas.length(text, canvas.font(size, bold: bold))
+}
+
+func fittedSplit(_ text: String, family: String = "pingfang", size: Int = 16, bold: Bool = true, width: Int) -> [String] {
+    let canvas = Canvas(family: family, inverted: false)
+    let (first, rest) = canvas.split(text, canvas.font(size, bold: bold), width)
+    return [first, rest]
 }
 
 func fitted(_ text: String, family: String, size: Int, bold: Bool, width: Int) -> String {
@@ -567,9 +590,20 @@ private func draw(_ view: FrameView, on c: Canvas) {
     case .wait:
         header(c, view.since, end: view.power.map { powerMark(c, $0) } ?? frameWidth - margin)
         c.text(margin, 52, view.title, c.font(titleSize, bold: true))
-        let nameX = c.tag(margin, 98, view.agent, solid: true) + gap
-        let nameFont = c.font(waitNameSize, bold: true)
-        c.text(nameX, 98, c.fit(view.task, nameFont, frameWidth - margin - nameX), nameFont)
+        // The conversation's name in large type when it fits on a line; otherwise in row type
+        // on two, which the space between the title and the foot has room for.
+        let large = c.font(waitNameSize, bold: true), width = frameWidth - margin - (margin + tagSize + gap)
+        if c.length(view.task, large) <= width {
+            let nameX = c.tag(margin, 98, view.agent, solid: true) + gap
+            c.text(nameX, 98, view.task, large)
+        } else {
+            let font = c.font(nameSize, bold: true)
+            let (first, rest) = c.split(view.task, font, width)
+            let top = rest.isEmpty ? 98 : 92  // one line of row type sits where the large one would
+            let nameX = c.tag(margin, top, view.agent, solid: true) + gap
+            c.text(nameX, top, first, font)
+            if !rest.isEmpty { c.text(nameX, top + 21, c.fit(rest, font, width), font) }
+        }
         let footer = [view.detail, view.footer].filter { !$0.isEmpty }.joined(separator: " · ")
         c.text(margin, 136, c.fit(footer, c.font(small), frameWidth - 2 * margin), c.font(small))
         return

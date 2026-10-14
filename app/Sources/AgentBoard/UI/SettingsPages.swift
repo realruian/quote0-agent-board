@@ -148,7 +148,7 @@ struct ConversationsPage: View {
 
     private func project(_ name: String) -> some View {
         Row(name) {
-            HStack(spacing: 10) {
+            HStack(spacing: Space.s) {
                 AliasField(alias: settings.aliases[name] ?? "") { alias in
                     var all = JSONObject()
                     for (key, value) in settings.aliases where key != name { all[key] = .string(value) }
@@ -201,7 +201,7 @@ struct UsagePage: View {
             ? (observed != 0 ? "上次读数已过期（\(ago(observed))），等下一次读取" : "还没有数据：\(needs)")
             : "\(ago(observed))更新"
         return Row(name, detail, health: meters.isEmpty ? .attention : nil) {
-            HStack(spacing: 18) {
+            HStack(spacing: Space.l) {
                 ForEach(meters, id: \.0) { Meter(label: $0.0, percent: $0.1) }
             }
         }
@@ -215,8 +215,8 @@ private struct UsageChoice: View {
     @State private var frames: [Bool: NSImage] = [:]
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(alignment: .top, spacing: 14) {
+        VStack(spacing: Space.m) {
+            HStack(alignment: .top, spacing: Space.l) {
                 option(true, "显示额度", sample == "idle" ? "空闲时显示各家额度条和重置时间" : "顶栏显示各家剩余额度和重置时间")
                 option(false, "不显示额度", sample == "idle" ? "空闲时只显示上次完成的对话" : "顶栏显示各状态的对话数")
             }
@@ -226,7 +226,7 @@ private struct UsageChoice: View {
             }
             .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 200)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Space.xs)
         .frame(maxWidth: .infinity)
         .onAppear(perform: render)
         .onChange(of: sample) { _, _ in render() }
@@ -236,16 +236,16 @@ private struct UsageChoice: View {
     private func option(_ on: Bool, _ title: String, _ detail: String) -> some View {
         let chosen = model.settings.showUsage == on
         return Button { if !chosen { model.apply(["show_usage": .bool(on)]) } } label: {
-            VStack(spacing: 8) {
+            VStack(spacing: Space.s) {
                 ScreenView(image: frames[on], maxWidth: 240)
-                HStack(spacing: 5) {
+                HStack(spacing: Space.xs) {
                     if chosen { IconView(.tick02, size: 14).foregroundStyle(Color.accentColor) }
-                    Text(title).font(.system(size: 13, weight: .medium))
+                    Text(title).font(.emphasis)
                 }
-                Text(detail).font(.system(size: 11)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Text(detail).font(.detail).foregroundStyle(.secondary).lineSpacing(detailLeading).multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(10)
+            .padding(Space.m)
             .frame(maxWidth: .infinity)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(chosen ? Color.accentColor : Tone.line, lineWidth: chosen ? 2 : 1))
             .contentShape(Rectangle())

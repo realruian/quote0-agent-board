@@ -25,7 +25,7 @@ struct DevicePage: View {
                     connected(device)
                 }
             } else {
-                Text("正在读取设备信息…").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text("正在读取设备信息…").explanation()
             }
         }
         .disabled(model.busy)
@@ -140,7 +140,7 @@ struct SetupPage: View {
                         }
                     }
                 } footer: {
-                    HStack(spacing: 4) {
+                    HStack(spacing: Space.xs) {
                         Text("密钥只保存在这台电脑上，只发给 MindReset 的服务。")
                         if !(hasKey && !changingKey) { Link("官方说明", destination: URL(string: "https://dot.mindreset.tech/docs/service/open/get_api")!) }
                     }
@@ -160,7 +160,7 @@ struct SetupPage: View {
                             let kind = models[item["model"]?.string ?? ""] ?? item["model"]?.string ?? "设备"
                             Row(alias.isEmpty ? kind : alias, (alias.isEmpty ? "" : "\(kind) · ") + "序列号 \(id)") {
                                 if id == state["device_id"]?.string {
-                                    HStack(spacing: 5) {
+                                    HStack(spacing: Space.xs) {
                                         IconView(.tick02)
                                         Text("正在使用")
                                     }
@@ -195,12 +195,12 @@ struct SetupPage: View {
                             Text("正在检查设备…").foregroundStyle(.secondary)
                         }
                     } footer: {
-                        Text("哪些 Agent 的状态显示在屏幕上，在「Agent」里。")
+                        Text("哪些 Agent 的对话显示在屏幕上，在「对话」里。")
                     }
                     Button("完成") { model.page = .overview }.glassButton(prominent: true)
                 }
             } else {
-                Text("正在读取…").font(.system(size: 12)).foregroundStyle(.secondary)
+                Text("正在读取…").explanation()
             }
         }
         .disabled(model.busy)

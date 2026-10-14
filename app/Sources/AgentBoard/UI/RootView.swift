@@ -62,15 +62,15 @@ private struct Sidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             ForEach(pages) { row($0) }
-            Text("高级").font(.system(size: 11, weight: .medium)).foregroundStyle(.tertiary)
-                .padding(.leading, 10).padding(.top, 18).padding(.bottom, 4)
+            Text("高级").font(.note.weight(.medium)).foregroundStyle(.tertiary)
+                .padding(.leading, Space.m).padding(.top, Space.l).padding(.bottom, Space.xs)
             ForEach(advanced) { row($0) }
-            Spacer(minLength: 12)
+            Spacer(minLength: Space.m)
             ScreenStatus(model: model)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, Space.s)
         .padding(.top, 52)  // clear of the window's three buttons
-        .padding(.bottom, 16)
+        .padding(.bottom, Space.l)
     }
 
     /// ⌘1, ⌘2 and so on go down the list.
@@ -88,17 +88,18 @@ private struct ScreenStatus: View {
 
     var body: some View {
         let status = model.status
-        HStack(alignment: .center, spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Dot(health: health)
-                    Text(headline).foregroundStyle(.primary)
+        HStack(alignment: .center, spacing: Space.s) {
+            VStack(alignment: .leading, spacing: Space.xs) {
+                HStack(alignment: .firstTextBaseline, spacing: Space.s) {
+                    Dot(health: health).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1.5 }
+                    // the state is read in full: two lines when it needs them, never cut
+                    Text(headline).font(.label).monospacedDigit().foregroundStyle(.primary)
+                        .lineLimit(2).lineSpacing(Space.hairline).fixedSize(horizontal: false, vertical: true).help(headline)
                 }
-                Text("v\(model.console.version)").foregroundStyle(.tertiary).padding(.leading, 14)
+                Text("v\(model.console.version)").font(.note).foregroundStyle(.tertiary).lineLimit(1)
+                    .padding(.leading, 7 + Space.s)  // under the words, past the dot
             }
-            .font(.system(size: 11))
-            .lineLimit(1)
-            Spacer(minLength: 4)
+            Spacer(minLength: Space.xs)
             if status.paused {
                 Button("恢复") { model.apply(["paused": false], quietly: true) }.controlSize(.small)
             } else if status.needsSetup {
@@ -110,8 +111,8 @@ private struct ScreenStatus: View {
                     .disabled(status.dryRun)
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, Space.m)
+        .padding(.vertical, Space.s)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
@@ -141,12 +142,12 @@ private struct SidebarRow: View {
 
     var body: some View {
         Button(action: choose) {
-            HStack(spacing: 9) {
+            HStack(spacing: Space.s) {
                 IconView(page.icon).foregroundStyle(selected ? .primary : .secondary)
                 Text(page.title).foregroundStyle(selected ? .primary : Color.primary.opacity(0.78))
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, Space.m)
             .frame(height: 30)
             .background(Color.primary.opacity(selected ? 0.075 : hovered ? 0.04 : 0), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
             .contentShape(Rectangle())

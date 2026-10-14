@@ -65,7 +65,7 @@ struct ScreenView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-        .padding(7)
+        .padding(Space.s)
         .background(Color(white: 0.13), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white.opacity(0.1)))  // keeps its edge on a dark page
         .frame(maxWidth: maxWidth)
@@ -89,9 +89,9 @@ struct ScreenPreview: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 22) {
+        HStack(alignment: .center, spacing: Space.xl) {
             ScreenView(image: image, maxWidth: 300)
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Space.s) {
                 if samples.count > 1 {
                     Picker("示例", selection: $sample) {
                         ForEach(samples, id: \.key) { Text($0.label).tag($0.key) }
@@ -99,7 +99,7 @@ struct ScreenPreview: View {
                     .pickerStyle(.radioGroup).labelsHidden()
                 }
                 Text(sample == "live" ? "按现在的对话画出，不会发到屏幕上" : "演示数据，不会发到屏幕上")
-                    .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                    .explanation().fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -120,7 +120,7 @@ struct Meter: View {
     let percent: Int
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Space.s) {
             Text(label).foregroundStyle(.secondary)
             Capsule().fill(Color.primary.opacity(0.1)).frame(width: 52, height: 4)
                 .overlay(alignment: .leading) {
@@ -128,7 +128,7 @@ struct Meter: View {
                 }
             Text("\(percent)%").monospacedDigit().frame(minWidth: 32, alignment: .trailing)
         }
-        .font(.system(size: 12))
+        .font(.detail)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(label)剩 \(percent)%")
     }
@@ -140,13 +140,13 @@ struct Pill: View {
     let color: Color
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Space.xs + Space.hairline) {
             Circle().fill(color).frame(width: 6, height: 6)
-            Text(text).font(.system(size: 12))
+            Text(text).font(.detail)
         }
-        .padding(.leading, 8)
-        .padding(.trailing, 10)
-        .padding(.vertical, 4)
+        .padding(.leading, Space.s)
+        .padding(.trailing, Space.s + Space.hairline)  // a dot on the left weighs less than text on the right
+        .padding(.vertical, Space.xs)
         .overlay(Capsule().strokeBorder(Tone.line))
     }
 }
@@ -169,7 +169,7 @@ struct StatusLine: View {
     let text: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: Space.s) {
             Dot(health: health).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1.5 }
             Text(text).fixedSize(horizontal: false, vertical: true)
         }
@@ -193,16 +193,16 @@ struct Banners: View {
 
     var body: some View {
         if !items.isEmpty {
-            VStack(spacing: 8) {
+            VStack(spacing: Space.s) {
                 ForEach(items) { item in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    HStack(alignment: .firstTextBaseline, spacing: Space.s) {
                         IconView(.alert02).foregroundStyle(.orange).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 3 }
-                        Text(item.text).fixedSize(horizontal: false, vertical: true)
+                        Text(item.text).lineSpacing(detailLeading).fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 12)
                         if let title = item.actionTitle { Button(title, action: item.action).controlSize(.small) }
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 11)
+                    .padding(.horizontal, Space.l)
+                    .padding(.vertical, Space.m)
                     .background(Color.orange.opacity(0.07), in: shape)
                     .overlay(shape.strokeBorder(Color.orange.opacity(0.22)))
                 }
@@ -223,9 +223,9 @@ struct NumberRow: View {
 
     var body: some View {
         Row(title, detail) {
-            HStack(spacing: 6) {
+            HStack(spacing: Space.s) {
                 TextField(title, value: $draft, format: .number).labelsHidden().textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing)
-                    .frame(width: 56).onSubmit(commit)
+                    .frame(width: 56).monospacedDigit().onSubmit(commit)
                 Stepper(title, value: $draft, in: range).labelsHidden()
                 Text(unit).foregroundStyle(.secondary)
             }
@@ -267,14 +267,14 @@ struct NoticeView: View {
     let notice: Notice
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: Space.s) {
             IconView(notice.isError ? .cancelCircle : .checkmarkCircle02).foregroundStyle(notice.isError ? .red : .green)
             Text(notice.text)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
+        .padding(.horizontal, Space.l)
+        .padding(.vertical, Space.s)
         .glass(cornerRadius: 20)
-        .padding(.bottom, 18)
+        .padding(.bottom, Space.l)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 }
