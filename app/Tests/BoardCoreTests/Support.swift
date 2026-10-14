@@ -31,6 +31,7 @@ class BoardTestCase: XCTestCase {
         Hooks.files = ["claude": home.appendingPathComponent("agents/claude-settings.json"), "codex": home.appendingPathComponent("agents/codex-hooks.json")]
         DotAPI.transport = { _ in throw URLError(.notConnectedToInternet) }
         UsageReader.forgetCodex()
+        UsageReader.forgetSamples()
     }
 
     override func tearDown() {

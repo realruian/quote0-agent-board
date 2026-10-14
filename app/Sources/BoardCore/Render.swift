@@ -216,6 +216,7 @@ private final class Canvas {
     let paper: UInt8
     let ink: UInt8
     let family: String
+    private var reversed: [(x0: Int, y0: Int, x1: Int, y1: Int)] = []  // boxes of text in reverse
 
     init(family: String, inverted: Bool) {
         context = CGContext(data: nil, width: frameWidth, height: frameHeight, bitsPerComponent: 8, bytesPerRow: frameWidth,
@@ -295,7 +296,7 @@ private final class Canvas {
 
     /// One line of text. `y` is where its vertical middle goes: half way between the
     /// font's ascent and descent, so different sizes on one row line up.
-    func text(_ x: Int, _ y: Int, _ text: String, _ font: CTFont, _ anchor: Anchor = .left) {
+    func text(_ x: Int, _ y: Int, _ text: String, _ font: CTFont, _ anchor: Anchor = .left, value: UInt8? = nil) {
         let run = glyphs(text, font)
         let width = run.reduce(0) { $0 + $1.advance }
         var pen = x
@@ -306,7 +307,7 @@ private final class Canvas {
         }
         let ascent = Int(ceil(CTFontGetAscent(font))), descent = Int(ceil(CTFontGetDescent(font)))
         let baseline = y + Int(floor(Double(ascent - descent) / 2 + 0.5))
-        context.setFillColor(gray: CGFloat(ink) / 255, alpha: 1)
+        context.setFillColor(gray: CGFloat(value ?? ink) / 255, alpha: 1)
         for item in run {
             var glyph = item.glyph
             var at = CGPoint(x: CGFloat(pen), y: CGFloat(frameHeight - baseline))
@@ -371,12 +372,24 @@ private final class Canvas {
 
     /// Settle every dot on black or white. Text was drawn with soft edges; a dot is
     /// inked when enough of it was covered.
+    /// Inside a box of reversed text it is the text that is drawn thin, so there a dot
+    /// is left as paper when enough of it was.
     func settle() {
         let cut = inkCoverage * 255
         for i in 0..<(stride * frameHeight) {
             let covered = ink == 0 ? 255 - Double(pixels[i]) : Double(pixels[i])
-            pixels[i] = covered > cut ? ink : paper
+            let x = i % stride, y = i / stride
+            if reversed.contains(where: { x >= $0.x0 && x <= $0.x1 && y >= $0.y0 && y <= $0.y1 }) {
+                pixels[i] = 255 - covered > cut ? paper : ink
+            } else {
+                pixels[i] = covered > cut ? ink : paper
+            }
         }
+    }
+
+    func reverse(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int) {
+        fill(x0, y0, x1, y1)
+        reversed.append((x0, y0, x1, y1))
     }
 }
 
@@ -429,29 +442,62 @@ private func header(_ c: Canvas, _ right: String) {
     if !right.isEmpty { c.text(frameWidth - margin, barY, right, c.font(small), .right) }
 }
 
+/// Text in reverse, on a black box that reaches `pad` dots past it on either side.
+private func alarm(_ c: Canvas, _ x: Int, _ y: Int, _ text: String, _ font: CTFont, to right: Int? = nil) {
+    let width = c.length(text, font)
+    c.reverse(x, y - 7, right ?? x + width + 2 * alarmPad - 1, y + 6)
+    c.text(x + alarmPad, y, text, font, value: c.paper)
+}
+
+private let alarmPad = 2
+
 /// Top bar while agents are working: per agent its mark, then what is left of each
-/// window and when that window resets, e.g. `5h 36% 14:30  7d 73% 周六`.
+/// window and when that window resets, e.g. `5h 36% 14:30  7d 73% 周六`. A window
+/// that will run out before it resets says when instead, in reverse: `5h 36% 13:20用完`.
 private func quotaHeader(_ c: Canvas, _ quota: [QuotaEntry]) {
     let font = c.font(small)
 
     // resets: 2 = every window shows its reset, 1 = only the first of each agent, 0 = none
-    func texts(_ resets: Int) -> [String] {
+    func texts(_ resets: Int) -> [[(text: String, alarm: Bool)]] {
         quota.map { entry in
             let parts = entry.rows.enumerated().map { index, row in
-                [row.short, "\(row.left)%", index < resets ? row.reset : ""].filter { !$0.isEmpty }.joined(separator: " ")
+                row.runsOut.isEmpty
+                    ? ([row.short, "\(row.left)%", index < resets ? row.reset : ""].filter { !$0.isEmpty }.joined(separator: " "), false)
+                    : ("\(row.short) \(row.left)% \(row.runsOut)用完", true)
             }
-            return parts.isEmpty ? "—" : parts.joined(separator: "  ")
+            return parts.isEmpty ? [("—", false)] : parts
         }
     }
-    func width(_ parts: [String]) -> Int { parts.reduce(0) { $0 + iconSize + 4 + c.length($1, font) } + gap }
+    let spacer = c.length("  ", font)
+    func width(_ parts: [(text: String, alarm: Bool)]) -> Int {
+        parts.reduce(0) { $0 + c.length($1.text, font) + ($1.alarm ? 2 * alarmPad : 0) } + spacer * (parts.count - 1)
+    }
+    func draw(_ parts: [(text: String, alarm: Bool)], from x: Int) {
+        var x = x
+        for part in parts {
+            if part.alarm { alarm(c, x, barY, part.text, font) } else { c.text(x, barY, part.text, font) }
+            x += width([part]) + spacer
+        }
+    }
 
-    let parts = [2, 1, 0].map(texts).first { width($0) <= frameWidth - 2 * margin } ?? texts(0)
+    let fits = { (agents: [[(text: String, alarm: Bool)]]) in agents.reduce(0) { $0 + iconSize + 4 + width($1) } + gap <= frameWidth - 2 * margin }
+    let parts = [2, 1, 0].map(texts).first(where: fits) ?? texts(0)
     let top = barY - iconSize / 2
     c.mark(margin, top, quota[0].agent, c.ink)
-    c.text(margin + iconSize + 4, barY, parts[0], font)
-    let rightX = frameWidth - margin - c.length(parts[1], font)
-    c.text(rightX, barY, parts[1], font)
+    draw(parts[0], from: margin + iconSize + 4)
+    let rightX = frameWidth - margin - width(parts[1])
+    draw(parts[1], from: rightX)
     c.mark(rightX - 4 - iconSize, top, quota[1].agent, c.ink)
+}
+
+/// The first window that will run out before it resets, said in full for the idle screen.
+private func runsOutLine(_ quota: [QuotaEntry]) -> String? {
+    for entry in quota {
+        for row in entry.rows where !row.runsOut.isEmpty {
+            return "\(entry.agent) \(row.window)额度约 \(row.runsOut) 用完" + (row.reset.isEmpty ? "" : "，\(row.reset) 才重置")
+        }
+    }
+    return nil
 }
 
 /// Idle screen: one bar per quota window, showing what is left and when it resets.
@@ -505,11 +551,23 @@ private func draw(_ view: FrameView, on c: Canvas) {
     } else {
         header(c, view.kind == .idle && !quota.isEmpty ? "空闲" : view.summary)
     }
-    c.fill(margin, ruleY, frameWidth - margin, ruleY)
+    // Conversations that did not fit are counted at the end of the rule.
+    var ruleEnd = frameWidth - margin
+    if view.kind == .list, view.more > 0 {
+        let more = "+\(view.more)"
+        c.text(frameWidth - margin, ruleY, more, c.font(small, bold: true), .right)
+        ruleEnd -= c.length(more, c.font(small, bold: true)) + 4
+    }
+    c.fill(margin, ruleY, ruleEnd, ruleY)
 
     if view.kind == .idle, !quota.isEmpty {
         quotaPanel(c, quota)
-        if !view.last.isEmpty { c.text(margin, 139, c.fit(view.last, c.font(small), frameWidth - 2 * margin), c.font(small)) }
+        // running out before the reset matters more than what was done last
+        if let warning = runsOutLine(quota) {
+            alarm(c, margin, 139, c.fit(warning, c.font(small), frameWidth - 2 * margin - 2 * alarmPad), c.font(small), to: frameWidth - margin)
+        } else if !view.last.isEmpty {
+            c.text(margin, 139, c.fit(view.last, c.font(small), frameWidth - 2 * margin), c.font(small))
+        }
         return
     }
 

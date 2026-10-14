@@ -185,4 +185,46 @@ final class ViewTests: BoardTestCase {
         XCTAssertNotEqual(withLeft(95).signature, withLeft(88).signature)
         XCTAssertNotEqual(withLeft(95), withLeft(96))
     }
+
+    func testWaitSaysHowLongInStepsThatGrowWithTheWait() {
+        let b = Board()
+        b.apply("claude", "UserPromptSubmit", alpha, now: 0)
+        b.apply("claude", "PermissionRequest", alpha.with(["tool_name": "Bash"]), now: 1000)
+        func at(_ minutes: Double) -> FrameView { buildView(b, now: 1000 + minutes * 60) }
+        XCTAssertEqual([1, 7, 12, 25, 50, 61, 130].map { at($0).since },
+                       ["刚开始等", "已等 5 分钟", "已等 10 分钟", "已等 20 分钟", "已等 45 分钟", "已等 1 小时", "已等 2 小时"])
+        XCTAssertEqual(at(31).signature, at(44).signature)  // no refresh inside a step
+        XCTAssertNotEqual(at(44).signature, at(46).signature)
+    }
+
+    func testListCountsTheConversationsThatDidNotFit() {
+        let b = Board()
+        for i in 0..<6 { b.apply("claude", "UserPromptSubmit", ["session_id": .string("\(i)"), "cwd": .string("/p/\(i)")], now: Double(i)) }
+        let view = buildView(b, now: 10, usage: sampleUsage)
+        XCTAssertEqual(view.more, 2)
+        XCTAssertEqual(buildView(b, now: 10, settings: settings { $0.maxRows = 2 }).more, 4)
+        var fewer = view
+        fewer.more = 1
+        XCTAssertNotEqual(render(view), render(fewer))
+        XCTAssertNotEqual(view.signature, fewer.signature)
+    }
+
+    func testAWindowThatRunsOutBeforeItsResetSaysWhen() {
+        let now = 1_791_425_520.0
+        func usage(_ runsOutAt: Double) -> Usage {
+            ["claude": AgentUsage(windows: [fiveHour: QuotaLeft(left: 36, resetsAt: now + 4 * 3600, runsOutAt: runsOutAt)]), "codex": AgentUsage()]
+        }
+        let soon = buildView(sampleBoard("list", now: now), now: now, usage: usage(now + 50 * 60))
+        XCTAssertEqual(soon.quota?[0].rows[0].runsOut, hhmm((((now + 50 * 60) / 600).rounded(.down)) * 600))
+        let calm = buildView(sampleBoard("list", now: now), now: now, usage: usage(0))
+        XCTAssertEqual(calm.quota?[0].rows[0].runsOut, "")
+        XCTAssertNotEqual(soon.signature, calm.signature)
+        XCTAssertNotEqual(render(soon), render(calm))
+        // a wobble inside ten minutes changes nothing
+        let wobble = buildView(sampleBoard("list", now: now), now: now, usage: usage(now + 50 * 60 + 30))
+        XCTAssertEqual(soon.quota?[0].rows[0].runsOut, wobble.quota?[0].rows[0].runsOut)
+        // the idle screen says it in full where the last task would go
+        let idle = { (u: Usage) in render(buildView(sampleBoard("idle", now: now), now: now, usage: u)) }
+        XCTAssertNotEqual(idle(usage(now + 50 * 60)), idle(usage(0)))
+    }
 }

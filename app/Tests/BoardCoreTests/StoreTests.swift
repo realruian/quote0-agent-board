@@ -303,4 +303,38 @@ final class UsageTests: BoardTestCase {
         XCTAssertEqual(UsageReader.left("codex", reading(3 * 86400, 3600), now)[fiveHour]?.left, 36)
         XCTAssertEqual(UsageReader.left("codex", reading(3 * 86400, -10), now), [fiveHour: QuotaLeft(left: 100, resetsAt: 0)])
     }
+
+    func testRunsOutAtThePaceOfTheLastHourIfThatComesBeforeTheReset() {
+        let reset = now + 3 * 3600
+        func sample(_ ago: Double, _ used: Double, _ resetsAt: Double? = nil) -> UsageReader.Sample {
+            UsageReader.Sample(at: now - ago, used: used, resetsAt: resetsAt ?? reset)
+        }
+        // 20 points in the last hour, 40 left: two hours more, before the reset three hours away
+        let busy = [sample(7200, 10), sample(3600, 40), sample(1800, 50), sample(60, 60)]
+        XCTAssertEqual(UsageReader.runsOut(busy, kind: fiveHour, now: now), now + 2 * 3600, accuracy: 1)
+        // the same readings with the reset sooner: it does not run out first
+        XCTAssertEqual(UsageReader.runsOut(busy.map { var s = $0; s.resetsAt = now + 3600; return s }, kind: fiveHour, now: now), 0)
+        // nothing spent lately, too short a look, or readings from before the window started over
+        XCTAssertEqual(UsageReader.runsOut([sample(3600, 60), sample(60, 60)], kind: fiveHour, now: now), 0)
+        XCTAssertEqual(UsageReader.runsOut([sample(600, 50), sample(60, 60)], kind: fiveHour, now: now), 0)
+        XCTAssertEqual(UsageReader.runsOut([sample(3600, 90, now - 10), sample(60, 60)], kind: fiveHour, now: now), 0)
+        // once spending stops the pace falls with time, so the estimate moves out past the reset
+        XCTAssertGreaterThan(UsageReader.runsOut(busy, kind: fiveHour, now: now + 600), now + 2 * 3600 + 600)
+        XCTAssertEqual(UsageReader.runsOut(busy, kind: fiveHour, now: now + 2 * 3600), 0)
+        // a week is judged over a day, and needs six hours of readings
+        let week = now + 3 * 86400
+        XCTAssertEqual(UsageReader.runsOut([sample(3 * 3600, 50, week), sample(60, 80, week)], kind: sevenDay, now: now), 0)
+        XCTAssertGreaterThan(UsageReader.runsOut([sample(12 * 3600, 50, week), sample(60, 80, week)], kind: sevenDay, now: now), 0)
+    }
+
+    func testReadingsAreKeptOnceAndShowUpAsWhenItRunsOut() {
+        func reading(_ ago: Double, _ used: Double) -> QuotaReading {
+            QuotaReading(observedAt: now - ago, windows: [fiveHour: QuotaUsed(used: used, resetsAt: now + 3 * 3600)])
+        }
+        UsageReader.remember("claude", reading(3600, 40))
+        UsageReader.remember("claude", reading(3600, 99))  // seen before: ignored
+        UsageReader.remember("claude", reading(60, 60))
+        XCTAssertEqual(UsageReader.left("claude", reading(60, 60), now)[fiveHour]?.runsOutAt ?? 0, now + 2 * 3600, accuracy: 1)
+        XCTAssertEqual(UsageReader.left("codex", reading(60, 60), now)[fiveHour]?.runsOutAt, 0)  // each agent keeps its own
+    }
 }

@@ -231,6 +231,52 @@ public enum UsageReader {
         return claudeReading
     }
 
+    // MARK: the pace
+
+    struct Sample: Equatable {
+        var at: Double
+        var used: Double
+        var resetsAt: Double
+    }
+
+    // per "agent window": readings of the last day, oldest first
+    private static var samples: [String: [Sample]] = [:]
+    private static let keptFor = 26.0 * 3600
+
+    static func forgetSamples() { samples = [:] }
+
+    /// Keep a reading's windows for working out the pace; a reading seen before adds nothing.
+    static func remember(_ agent: String, _ reading: QuotaReading?) {
+        guard let reading = reading else { return }
+        for (kind, window) in reading.windows {
+            let key = "\(agent) \(kind)"
+            var kept = samples[key] ?? []
+            if let last = kept.last, reading.observedAt <= last.at { continue }
+            kept.append(Sample(at: reading.observedAt, used: window.used, resetsAt: window.resetsAt))
+            samples[key] = kept.filter { $0.at >= reading.observedAt - keptFor }
+        }
+    }
+
+    // How far back the pace is taken from, and the least time it needs to be worth anything.
+    // A week's window is judged over a day, so one busy hour does not say it runs out tonight.
+    private static let paceOver = [fiveHour: 3600.0, sevenDay: 86400.0]
+    private static let paceAtLeast = [fiveHour: 900.0, sevenDay: 6 * 3600.0]
+
+    /// When a window runs out if it goes on being spent as it has been lately: from the
+    /// reading about `paceOver` ago (or the earliest in this window) to now. 0 when that
+    /// comes after the reset, nothing is being spent, or there is too little to go on.
+    /// Measured to now rather than to the last reading, so the pace drops while nothing is spent.
+    static func runsOut(_ kept: [Sample], kind: String, now: Double) -> Double {
+        guard let latest = kept.last, latest.resetsAt > now, let over = paceOver[kind], let least = paceAtLeast[kind] else { return 0 }
+        let window = kept.filter { abs($0.resetsAt - latest.resetsAt) < 300 }  // since the window last started over
+        guard let from = window.last(where: { $0.at <= now - over }) ?? window.first, now - from.at >= least else { return 0 }
+        let rate = (latest.used - from.used) / (now - from.at)
+        let rest = 100 - latest.used
+        guard rate > 0, rest > 0 else { return 0 }
+        let at = now + rest / rate
+        return at < latest.resetsAt ? at : 0
+    }
+
     // MARK: what is left
 
     /// Remaining percent per window, keeping only what can still be trusted.
@@ -252,7 +298,7 @@ public enum UsageReader {
                 if rolledOver { reset = 0 }
             }
             left = max(0, min(100, left.rounded(.toNearestOrEven)))
-            out[kind] = QuotaLeft(left: Int(left), resetsAt: reset)
+            out[kind] = QuotaLeft(left: Int(left), resetsAt: reset, runsOutAt: runsOut(samples["\(agent) \(kind)"] ?? [], kind: kind, now: now))
         }
         return out
     }
@@ -261,6 +307,8 @@ public enum UsageReader {
     /// when there is no reading worth showing.
     public static func snapshot(now: Double = Date().timeIntervalSince1970, codexTranscripts: [String] = []) -> Usage {
         let claude = readClaude(now: now), codex = readCodex(also: codexTranscripts)
+        remember("claude", claude)
+        remember("codex", codex)
         return [
             "claude": AgentUsage(windows: left("claude", claude, now), observedAt: claude?.observedAt ?? 0),
             "codex": AgentUsage(windows: left("codex", codex, now), observedAt: codex?.observedAt ?? 0),

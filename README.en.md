@@ -45,7 +45,7 @@ The feature set is modelled on [Vibe Island](https://vibeisland.app) for the Mac
 
 **Overview**
 
-One conversation per row, up to four rows. The icon on the left says which agent it is: a solid square means running, an outlined one means finished. The right-hand column is a duration: how long a running task has been going, or how long a finished one took. The top bar shows the quota left for each agent and when it resets.
+One conversation per row, up to four rows. The icon on the left says which agent it is: a solid square means running, an outlined one means finished. The right-hand column is a duration: how long a running task has been going, or how long a finished one took. The top bar shows the quota left for each agent and when it resets; when a window will run out before its reset at the pace of late, that part turns reversed and says roughly when it runs out instead. When there are more conversations than rows, the end of the rule says how many more, such as `+2`.
 
 </td>
 </tr>
@@ -55,7 +55,7 @@ One conversation per row, up to four rows. The icon on the left says which agent
 
 **Needs you**
 
-When any conversation asks for approval, asks a question or wants a plan confirmed, the whole screen inverts. It returns to the overview once you have dealt with it.
+When any conversation asks for approval, asks a question or wants a plan confirmed, the whole screen inverts, with how long it has been waiting at the top right. It returns to the overview once you have dealt with it.
 
 </td>
 </tr>
@@ -65,7 +65,7 @@ When any conversation asks for approval, asks a question or wants a plan confirm
 
 **Idle**
 
-With nothing running, the screen shows full quota bars, reset times and the last conversation that finished.
+With nothing running, the screen shows full quota bars, reset times and the last conversation that finished. When a window will run out before its reset, the bottom line becomes a reversed warning saying when it runs out and when it resets.
 
 </td>
 </tr>
@@ -210,6 +210,8 @@ Two limits:
 
 Reset times are fixed moments (a clock time today, or a weekday) rather than countdowns, so they stay true between refreshes.
 
+"Runs out around" is worked out from recent use: the last hour for the 5-hour window, the last day for the weekly one. It shows only when that comes before the reset; once you stop, the pace drops and the warning goes away by itself. Right after the app starts there are not enough readings yet, so it starts after 15 minutes for the 5-hour window and 6 hours for the weekly one. The time is rounded down to ten minutes, so small wobbles in the estimate do not change it.
+
 ## Refresh policy
 
 Every e-ink refresh flashes the whole screen for about two seconds, so refreshes are rationed:
@@ -219,6 +221,7 @@ Every e-ink refresh flashes the whole screen for about two seconds, so refreshes
 - Ordinary changes are at least 10 seconds apart; you can raise this on the 刷新 page. A "needs you" alert ignores the limit and is shown at once.
 - Running time is not updated every minute: it reads `<5m` for the first five minutes, then all rows update together every five minutes.
 - Quota alone triggers a refresh only when it moves by 5 percentage points.
+- The time on the "needs you" screen moves in steps (5, 10, 15, 20, 30 and 45 minutes, then each hour), so the black screen is not redrawn every minute.
 
 ## Privacy and security
 

@@ -74,7 +74,7 @@ public final class Console {
             guard let reading = usage?[agent] else { continue }
             var windows = JSONObject()
             for kind in usageWindows {
-                if let window = reading.windows[kind] { windows[kind] = ["left": JSON(window.left), "resets_at": JSON(window.resetsAt)] }
+                if let window = reading.windows[kind] { windows[kind] = ["left": JSON(window.left), "resets_at": JSON(window.resetsAt), "runs_out_at": JSON(window.runsOutAt)] }
             }
             out[agent] = ["windows": .object(windows), "observed_at": JSON(reading.observedAt)]
         }

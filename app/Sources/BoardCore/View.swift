@@ -8,13 +8,17 @@ public let sevenDay = "seven_day"
 let usageWindows = [fiveHour, sevenDay]
 
 /// Quota left in one window, and when the window starts over (0 when not known).
+/// `runsOutAt` is when it will be used up at the pace of late, if that comes before
+/// the reset; 0 otherwise.
 public struct QuotaLeft: Equatable {
     public var left: Int
     public var resetsAt: Double
+    public var runsOutAt: Double
 
-    public init(left: Int, resetsAt: Double) {
+    public init(left: Int, resetsAt: Double, runsOutAt: Double = 0) {
         self.left = left
         self.resetsAt = resetsAt
+        self.runsOutAt = runsOutAt
     }
 }
 
@@ -36,6 +40,7 @@ public struct QuotaRow: Equatable {
     var short: String
     var left: Int
     var reset: String
+    var runsOut = ""  // when it is used up at the present pace, if before the reset
 }
 
 public struct QuotaEntry: Equatable {
@@ -68,6 +73,7 @@ public struct FrameView: Equatable {
     public var summary = ""
     public var rows: [ViewRow] = []
     public var quota: [QuotaEntry]?
+    public var more = 0  // conversations that did not fit
     // idle, and notices such as quiet hours
     public var line = ""
     public var last = ""
@@ -101,11 +107,11 @@ public struct FrameView: Equatable {
         }
         let quotaText = quota.map { entries in
             entries.map { entry in
-                entry.agent + "\u{1}" + entry.rows.map { "\($0.window) \($0.short) \(step($0.left)) \($0.reset)" }.joined(separator: "\u{1}")
+                entry.agent + "\u{1}" + entry.rows.map { "\($0.window) \($0.short) \(step($0.left)) \($0.reset) \($0.runsOut)" }.joined(separator: "\u{1}")
             }.joined(separator: "\u{2}")
         } ?? "none"
         return [kind.rawValue, font, title, task, agent, detail, since, footer, summary, rowText.joined(separator: "\u{2}"),
-                quotaText, line, last, note].joined(separator: "\u{3}")
+                quotaText, String(more), line, last, note].joined(separator: "\u{3}")
     }
 }
 
@@ -139,6 +145,23 @@ func resetLabel(_ resetsAt: Double, _ now: Double) -> String {
     return "周" + String(Array("一二三四五六日")[(weekday + 5) % 7])
 }
 
+/// When a window will be used up, on the ten minutes before, so a pace that wobbles
+/// a little does not move it; past a day, the weekday.
+func runsOutLabel(_ runsOutAt: Double, _ now: Double) -> String {
+    if runsOutAt <= now { return "" }
+    if runsOutAt - now >= 86400 { return resetLabel(runsOutAt, now) }
+    return hhmm((runsOutAt / 600).rounded(.down) * 600)
+}
+
+/// How long the conversation has waited, in steps that grow with the wait, since each
+/// change is a refresh of a screen in black: a few minutes, then each hour.
+func waitedLabel(_ seconds: Double) -> String {
+    let minutes = Int(max(0, seconds) / 60)
+    if minutes < 5 { return "刚开始等" }
+    if minutes >= 60 { return "已等 \(minutes / 60) 小时" }
+    return "已等 \([5, 10, 15, 20, 30, 45].last { $0 <= minutes }!) 分钟"
+}
+
 /// One entry per agent: percent left per window, with the labels each screen uses.
 func quotaEntries(_ usage: Usage, _ now: Double) -> [QuotaEntry] {
     let label = [fiveHour: ("5 小时", "5h"), sevenDay: ("本周", "7d")]
@@ -146,7 +169,8 @@ func quotaEntries(_ usage: Usage, _ now: Double) -> [QuotaEntry] {
         let windows = usage[agent]?.windows ?? [:]
         let rows = usageWindows.compactMap { kind -> QuotaRow? in
             guard let window = windows[kind], let (long, short) = label[kind] else { return nil }
-            return QuotaRow(window: long, short: short, left: window.left, reset: resetLabel(window.resetsAt, now))
+            return QuotaRow(window: long, short: short, left: window.left, reset: resetLabel(window.resetsAt, now),
+                            runsOut: runsOutLabel(window.runsOutAt, now))
         }
         return QuotaEntry(agent: agentLabel[agent]!, rows: rows)
     }
@@ -180,7 +204,7 @@ public func buildView(_ board: Board, now: Double = Date().timeIntervalSince1970
         view.task = headline(first)
         view.agent = agentLabel[first.source] ?? first.source
         view.detail = settings.showDetail && first.waitKind == "permission" ? first.detail : ""
-        view.since = "\(hhmm(first.waitingSince)) 开始等"
+        view.since = waitedLabel(now - first.waitingSince)
         view.footer = others.isEmpty ? "其他 Agent 空闲" : others.joined(separator: " · ")
         view.named = [first.key]
         return view
@@ -195,6 +219,7 @@ public func buildView(_ board: Board, now: Double = Date().timeIntervalSince1970
         // most urgent first; the rest wait for a free line
         let listed = shown.prefix(min(settings.maxRows, maxRows))
         view.named = listed.map(\.key)
+        view.more = shown.count - listed.count
         view.rows = listed.map { s in
             // The agent's tag carries the state (solid while working, outlined once finished).
             // The right-hand column is how long the task has run, or took; or a word when it needs a look.
