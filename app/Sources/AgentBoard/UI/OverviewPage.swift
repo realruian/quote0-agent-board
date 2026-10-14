@@ -52,7 +52,9 @@ struct OverviewPage: View {
             items.append(BannerItem(text: "还没有连接设备，画面发不到屏幕上。", actionTitle: "连接设备") { model.page = .setup })
         } else if missed {
             let since = (model.device?["last_render"]?.string).flatMap { $0.isEmpty ? nil : "，屏幕停在 \($0) 的画面" } ?? ""
-            items.append(BannerItem(text: "设备休眠或离线，最新画面没有显示出来\(since)。接上电源后会自动补上；用电池时要等它下次醒来。",
+            let reason = model.engine.awayReason
+            let more = reason.contains("电池") ? "用电池时设备不刷新就睡觉，隔一段时间醒来一次（和「定时休眠」无关），接上电源后会自动补上。" : "设备联网后会自动补上。"
+            items.append(BannerItem(text: "\(reason)，最新画面没有显示出来\(since)。\(more)",
                                     actionTitle: "设备设置") { model.page = .device })
         }
         return items
@@ -67,7 +69,7 @@ struct OverviewPage: View {
     private var lines: [(Health, String)] {
         var out: [(Health, String)] = []
         if let push = push, !push.ok { out.append((.bad, "最近一次刷新失败：\(push.message)")) }
-        if missed { out.append((.attention, "最新画面还没显示：设备休眠或离线")) }
+        if missed { out.append((.attention, "最新画面还没显示：\(model.engine.awayReason)")) }
         if model.status.paused { out.append((.attention, "已暂停，屏幕不再更新")) }
         if model.status.quiet { out.append((.attention, "夜间免打扰中，屏幕暂不刷新")) }
         if out.isEmpty, !model.status.dryRun, !model.status.needsSetup {

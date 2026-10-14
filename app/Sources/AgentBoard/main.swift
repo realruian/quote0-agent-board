@@ -223,7 +223,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if now.dryRun { return (boardSymbol, nil, "空跑模式，画面不会发到屏幕上", false) }
         guard let push = now.lastPush else { return (boardSymbol, nil, "还没有刷新过屏幕", false) }
         if !push.ok { return ("exclamationmark.triangle", "exclamationmark", "最近一次刷新失败：\(push.message)", false) }
-        if push.delivered == false { return ("moon.zzz", "moon.fill", "设备休眠或离线，最新画面还没显示", false) }
+        if push.delivered == false { return ("moon.zzz", "moon.fill", "\(engine.awayReason)，最新画面还没显示", false) }
         if now.quiet { return (boardSymbol, nil, "夜间免打扰中，屏幕暂不刷新", false) }
         return (boardSymbol, nil, "屏幕已是最新 · \(ago(push.at))刷新", true)
     }

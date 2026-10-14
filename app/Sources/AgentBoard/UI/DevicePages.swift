@@ -47,7 +47,7 @@ struct DevicePage: View {
             items.append(BannerItem(text: "设备的循环列表里没有“图像 API”，状态牌显示不出来。请在 Dot. App 的内容工坊里添加。"))
         }
         if device["asleep"]?.bool == true {
-            items.append(BannerItem(text: "设备休眠中，每 \(device["battery_minutes"]?.int ?? 0) 分钟醒来刷新一次。接上电源后有变化就刷新。"))
+            items.append(BannerItem(text: "设备在用电池，不刷新时就睡觉省电，每 \(device["battery_minutes"]?.int ?? 0) 分钟醒来刷新一次。这和下面的「定时休眠」无关；接上电源后有变化就刷新。"))
         }
         return items
     }

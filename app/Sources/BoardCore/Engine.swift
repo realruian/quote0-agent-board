@@ -479,6 +479,15 @@ public final class Engine {
         }
     }
 
+    /// Why a frame that went out is not on the screen yet, in a few words. On battery the device
+    /// sleeps between wakes to save power, which is not its scheduled sleep; on power it is offline.
+    public var awayReason: String {
+        locked {
+            guard let power = power else { return "设备在省电或离线" }
+            return power.plugged ? "设备离线" : "设备用电池省电中"
+        }
+    }
+
     /// Keep the charge a status reports. A status that does not say keeps the one before.
     func notePower(_ status: JSON) {
         guard let reading = DotAPI.power(status) else { return }

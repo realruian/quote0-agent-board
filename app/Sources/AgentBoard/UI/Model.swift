@@ -177,7 +177,7 @@ final class BoardModel: ObservableObject {
 
     func refreshScreen() {
         engine.forceRefresh()
-        say(status.lastPush?.delivered == false ? "已发出，设备休眠中，醒来后显示" : "正在刷新屏幕")
+        say(status.lastPush?.delivered == false ? "已发出，\(engine.awayReason)，醒来后显示" : "正在刷新屏幕")
     }
 
     /// What the screen is doing, in a few words; after a change, also that it was saved.
@@ -188,10 +188,10 @@ final class BoardModel: ObservableObject {
         switch status.screen {
         case .current: return saved ? "已保存" : "屏幕已是最新"
         case .failed: return prefix + "刷新失败，稍后自动重试"
-        case .waitingForDevice: return prefix + "设备休眠中，醒来后显示"
+        case .waitingForDevice: return prefix + "\(engine.awayReason)，醒来后显示"
         case .sending(let at):
             let wait = Int((at - Date().timeIntervalSince1970).rounded(.up))
-            if status.lastPush?.delivered == false { return prefix + "设备休眠中，醒来后显示" }
+            if status.lastPush?.delivered == false { return prefix + "\(engine.awayReason)，醒来后显示" }
             return prefix + (wait <= 3 ? "屏幕马上更新" : "屏幕 \(wait) 秒后更新")
         }
     }

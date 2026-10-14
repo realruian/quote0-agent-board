@@ -262,4 +262,14 @@ final class ConsoleTests: BoardTestCase {
         engine.locked { engine.setLastPush(Engine.LastPush(at: now, ok: false, kind: "list", message: "断网", delivered: nil)) }
         XCTAssertEqual(engine.screenState(now: now), .failed("断网"))
     }
+
+    func testAFrameNotShownYetIsPutDownToBatteryOrToBeingOffline() {
+        XCTAssertEqual(engine.awayReason, "设备在省电或离线")
+        engine.notePower(["status": ["battery": "86%"]])
+        XCTAssertEqual(engine.awayReason, "设备用电池省电中")
+        engine.notePower(["status": ["battery": "已连接电源"]])
+        XCTAssertEqual(engine.awayReason, "设备离线")
+        engine.notePower(["status": ["current": "离线"]])  // says nothing of the charge: the last reading stands
+        XCTAssertEqual(engine.awayReason, "设备离线")
+    }
 }
