@@ -1,3 +1,3 @@
 """AI agent status board for the MindReset Quote/0 e-ink display."""
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
