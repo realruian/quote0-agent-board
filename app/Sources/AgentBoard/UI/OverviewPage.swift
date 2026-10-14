@@ -25,7 +25,6 @@ struct OverviewPage: View {
                         HStack(spacing: 8) {
                             if model.status.paused { Button("恢复") { model.apply(["paused": false], quietly: true) } }
                             Button("刷新屏幕", action: model.refreshScreen).disabled(model.status.needsSetup)
-                            Button("发送测试画面", action: model.sendTestFrame).disabled(model.status.needsSetup)
                         }
                         .padding(.top, 6)
                     }
@@ -33,13 +32,6 @@ struct OverviewPage: View {
                 }
                 .padding(.vertical, 8)
                 .padding(.horizontal, 4)
-            }
-
-            if model.settings.showUsage {
-                Card("剩余额度") {
-                    quota("Claude", model.status.usage?["claude"], needs: "需要在终端里登录过 Claude Code")
-                    quota("Codex", model.status.usage?["codex"], needs: "Codex 回复一次后就有")
-                }
             }
 
             Card("当前对话") {
@@ -61,7 +53,7 @@ struct OverviewPage: View {
         } else if missed {
             let since = (model.device?["last_render"]?.string).flatMap { $0.isEmpty ? nil : "，屏幕停在 \($0) 的画面" } ?? ""
             items.append(BannerItem(text: "设备休眠或离线，最新画面没有显示出来\(since)。接上电源后会自动补上；用电池时要等它下次醒来。",
-                                    actionTitle: "更改刷新间隔") { model.page = .refresh })
+                                    actionTitle: "设备设置") { model.page = .device })
         }
         return items
     }
@@ -97,25 +89,10 @@ struct OverviewPage: View {
                 let state = [device["status"]?["current"]?.string, battery].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
                 StatusLine(health: device["asleep"]?.bool == true ? .attention : .good,
                            text: "设备：\(state)，用电池时每 \(device["battery_minutes"]?.int ?? 0) 分钟刷新一次")
-                Button("更改刷新间隔") { model.page = .refresh }.buttonStyle(.link)
+                Button("更改用电池时的刷新间隔") { model.page = .device }.buttonStyle(.link)
             }
         } else {
             StatusLine(health: .unknown, text: "正在检查设备…")
-        }
-    }
-
-    private func quota(_ name: String, _ reading: AgentUsage?, needs: String) -> some View {
-        let meters = [(fiveHour, "5 小时"), (sevenDay, "本周")].compactMap { kind, label in
-            reading?.windows[kind].map { (label, $0.left) }
-        }
-        let observed = reading?.observedAt ?? 0
-        let detail = meters.isEmpty
-            ? (observed != 0 ? "上次读数已过期（\(ago(observed))），等下一次读取" : "还没有数据，\(needs)")
-            : "\(ago(observed))更新"
-        return Row(name, detail, health: meters.isEmpty ? .unknown : nil) {
-            HStack(spacing: 18) {
-                ForEach(meters, id: \.0) { Meter(label: $0.0, percent: $0.1) }
-            }
         }
     }
 

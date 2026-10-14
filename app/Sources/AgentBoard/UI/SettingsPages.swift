@@ -1,57 +1,90 @@
-// The pages that hold settings: what the screen shows, when it refreshes, which alerts take it over.
+// The pages that hold settings: how the screen looks, which alerts take it over, which
+// conversations it lists, whether it shows quota, and when it refreshes.
+// Pages that change the picture keep a preview of it pinned above their settings.
 
 import BoardCore
 import SwiftUI
 
 struct DisplayPage: View {
     @ObservedObject var model: BoardModel
-    @State private var sample = "list"
-    @State private var preview: NSImage?
-    @State private var newProject = ""
-    @State private var known: [String] = []
 
     private var settings: BoardSettings { model.settings }
 
     var body: some View {
         PageView(page: .display) {
-            Card {
-                VStack(spacing: 12) {
-                    ScreenView(image: preview, maxWidth: 380)
-                    Picker("示例", selection: $sample) {
-                        Text("运行中").tag("list")
-                        Text("等你批准").tag("wait")
-                        Text("空闲").tag("idle")
-                        Text("实际状态").tag("live")
-                    }
-                    .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 380)
-                    Text("预览，不会发到屏幕上").font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 10)
-            }
-
-            Card("内容") {
+            ScreenPreview(model: model, samples: [("list", "运行中"), ("wait", "等你批准"), ("idle", "空闲"), ("live", "实际状态")])
+        } content: {
+            Card("文字") {
                 Row("字体", "屏幕只有黑白两色，不同字体的笔画粗细会有差别") {
                     Picker("字体", selection: Binding(get: { settings.font }, set: { model.apply(["font": .string($0)]) })) {
                         ForEach(Fonts.available(), id: \.key) { Text($0.label).tag($0.key) }
                     }
                     .labelsHidden().fixedSize()
                 }
-                Row("显示对话名称", "和 Claude、Codex 侧边栏里的名称一致；新对话先用你发的第一句话", isOn: model.flag("show_titles", \.showTitles))
-                Row("等批准时显示工具名", "例如 Bash、Edit", isOn: model.flag("show_detail", \.showDetail))
-                NumberRow(title: "最多行数", detail: "对话更多时，优先显示等你处理的和最近有动静的", value: settings.maxRows, range: 1...4, unit: "行") {
+                Row("显示对话名称", "和 Claude、Codex 侧边栏里的名称一致；新对话先用你发的第一句话。关掉后只显示项目文件夹名",
+                    isOn: model.flag("show_titles", \.showTitles))
+            }
+
+            Card("布局") {
+                NumberRow(title: "最多行数", detail: "对话更多时，优先显示等你处理的和最近有动静的，其余在横线右端计数", value: settings.maxRows,
+                          range: 1...4, unit: "行") {
                     model.apply(["max_rows": JSON($0)])
                 }
-                Row("空闲时显示上次完成的项目", isOn: model.flag("idle_show_last", \.idleShowLast))
-            }
-
-            Card("剩余额度") {
-                UsageChoice(model: model, sample: sample)
+                Row("空闲时显示上次完成的对话", isOn: model.flag("idle_show_last", \.idleShowLast))
             } footer: {
-                Text("显示时，App 每 5 分钟向本机的 claude 命令行查询一次 Claude 额度，需要在终端里登录过 Claude Code；Codex 额度读自它的对话记录。不显示时这些都不做。")
+                Text("画面会经过 MindReset 的服务器发到设备。额度的显示在「用量」里，显示哪些对话在「对话」里。")
+            }
+        }
+    }
+}
+
+struct AlertsPage: View {
+    @ObservedObject var model: BoardModel
+
+    var body: some View {
+        PageView(page: .alerts) {
+            ScreenPreview(model: model, samples: [("wait", "等你批准"), ("live", "实际状态")])
+        } content: {
+            Card("整屏提醒") {
+                takeover("permission", "等你批准时", "Agent 要执行需要授权的操作")
+                takeover("question", "等你回答时", "Agent 向你提问")
+                takeover("plan", "等你看计划时", "Agent 写好计划等你确认")
+            } footer: {
+                Text("整屏反色显示，并立即刷新。关闭的情况只在列表里显示成一行。")
             }
 
-            Card("对话保留") {
+            Card("提醒画面") {
+                Row("显示要批准的工具", "例如 Bash、Edit，写在画面底部", isOn: model.flag("show_detail", \.showDetail))
+            } footer: {
+                Button("想让屏幕在夜间停止刷新，在「刷新」里打开夜间免打扰") { model.page = .refresh }.buttonStyle(.link)
+            }
+        }
+    }
+
+    private func takeover(_ kind: String, _ title: String, _ detail: String) -> some View {
+        Row(title, detail, isOn: Binding(get: { model.settings.takeover[kind] ?? true }, set: { model.apply(["takeover": [kind: .bool($0)]]) }))
+    }
+}
+
+/// Which conversations reach the screen: the agents the board listens to, how long a
+/// conversation stays, and which projects are renamed or left off.
+struct ConversationsPage: View {
+    @ObservedObject var model: BoardModel
+    @State private var newProject = ""
+    @State private var known: [String] = []
+
+    private var settings: BoardSettings { model.settings }
+
+    var body: some View {
+        PageView(page: .conversations) {
+            if let data = model.integrations {
+                Banners(items: data["hook_installed"]?.bool == true ? [] : [BannerItem(text: "没有找到钩子脚本，重新打开一次 App 可以装回来。")])
+                agent("claude", "Claude Code", data["claude"], note: nil)
+                agent("codex", "Codex", data["codex"],
+                      note: "连接后，Codex 下次启动会要求你确认信任新钩子，确认后才生效。开关会修改对应 Agent 的全局配置文件，修改前会备份，不改动其他工具的配置，只对之后新开的对话生效。")
+            }
+
+            Card("显示多久") {
                 NumberRow(title: "完成后保留", detail: "对话结束后在屏幕上停留的时间", value: settings.doneTTLMinutes, range: 1...720, unit: "分钟") {
                     model.apply(["done_ttl_minutes": JSON($0)])
                 }
@@ -69,23 +102,40 @@ struct DisplayPage: View {
                     }
                 }
             } footer: {
-                Text("别名会替换屏幕上的项目名。隐藏的项目不显示在屏幕上，也不触发整屏提醒。示例画面里的项目和额度是演示用的，选“实际状态”可以看到真实效果。画面会经过 MindReset 的服务器发到设备。")
+                Text("别名会替换屏幕上的项目名。隐藏的项目不显示在屏幕上，也不触发整屏提醒。")
             }
         }
         .onAppear {
+            model.loadIntegrations()
             known = model.console.settings()["known_projects"]?.array?.compactMap(\.string) ?? []
-            render()
         }
-        .onChange(of: sample) { _, _ in render() }
-        .onChange(of: model.settings) { _, _ in render() }
+    }
+
+    private func agent(_ id: String, _ name: String, _ state: JSON?, note: String?) -> some View {
+        let exists = state?["exists"]?.bool == true
+        let installed = state?["installed"]?.int ?? 0, expected = state?["expected"]?.int ?? 0
+        let on = installed > 0, full = installed == expected
+        let status: String = {
+            if !exists { return "没有找到它的配置文件，可能没装" }
+            if let error = state?["error"]?.string { return error }
+            if full { return "已连接" }
+            return on ? "连接不完整（\(installed)/\(expected)），关掉再打开可以修复" : "未连接"
+        }()
+        return Card(id == "claude" ? "接入的 Agent" : nil) {
+            Row(name, status, health: !exists ? .unknown : full ? .good : on ? .attention : .unknown,
+                isOn: Binding(get: { on }, set: { model.connect(id, name, $0) }))
+                .disabled(!exists)
+            Row("配置文件", value: state?["path"]?.string ?? "")
+            if let others = state?["vibe_island"]?.int, others > 0 {
+                Row("Vibe Island", value: "检测到它的 \(others) 个钩子，互不影响")
+            }
+        } footer: {
+            if let note = note { Text(note) }
+        }
     }
 
     private var projects: [String] {
         Array(Set(known + settings.aliases.keys + settings.hiddenProjects)).sorted { $0.localizedCompare($1) == .orderedAscending }
-    }
-
-    private func render() {
-        model.preview(sample: sample) { preview = $0 }
     }
 
     private func addProject() {
@@ -113,21 +163,69 @@ struct DisplayPage: View {
     }
 }
 
+/// Quota: whether the screen shows it, and what the agents report.
+struct UsagePage: View {
+    @ObservedObject var model: BoardModel
+
+    var body: some View {
+        PageView(page: .usage) {
+            Card("屏幕上") {
+                UsageChoice(model: model)
+            }
+
+            if model.settings.showUsage {
+                Card("现在的读数") {
+                    quota("Claude", model.status.usage?["claude"], needs: "需要在终端里运行 claude auth login 登录 Claude Code")
+                    quota("Codex", model.status.usage?["codex"], needs: "Codex 回复一次后就有")
+                } footer: {
+                    Text("额度会在重置前用完时，屏幕上那一项反色，显示大约几点用完。按最近的用量推算：5 小时额度看最近 1 小时，每周额度看最近 1 天。")
+                }
+            }
+
+            Card("数据从哪来") {
+                Row("Claude", "每 5 分钟问一次本机的 claude 命令行，它用自己的登录向 Anthropic 查询；只信 20 分钟内的读数") { EmptyView() }
+                Row("Codex", "读 Codex 写在本机的对话记录，过了重置时间视为已恢复") { EmptyView() }
+            } footer: {
+                Text("本 App 不登录任何账号，也不读取登录凭证。不显示额度时，这些都不做。")
+            }
+        }
+    }
+
+    private func quota(_ name: String, _ reading: AgentUsage?, needs: String) -> some View {
+        let meters = [(fiveHour, "5 小时"), (sevenDay, "本周")].compactMap { kind, label in
+            reading?.windows[kind].map { (label, $0.left) }
+        }
+        let observed = reading?.observedAt ?? 0
+        let detail = meters.isEmpty
+            ? (observed != 0 ? "上次读数已过期（\(ago(observed))），等下一次读取" : "还没有数据：\(needs)")
+            : "\(ago(observed))更新"
+        return Row(name, detail, health: meters.isEmpty ? .attention : nil) {
+            HStack(spacing: 18) {
+                ForEach(meters, id: \.0) { Meter(label: $0.0, percent: $0.1) }
+            }
+        }
+    }
+}
+
 /// The screen with and without quota, side by side: picking one is the setting.
 private struct UsageChoice: View {
     @ObservedObject var model: BoardModel
-    let sample: String
+    @State private var sample = "list"
     @State private var frames: [Bool: NSImage] = [:]
 
-    // the waiting screen has no quota on it, so the overview stands in for it
-    private var shown: String { sample == "wait" ? "list" : sample }
-
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            option(true, "显示额度", shown == "idle" ? "空闲时显示各家额度条和重置时间" : "顶栏显示各家剩余额度和重置时间")
-            option(false, "不显示额度", shown == "idle" ? "空闲时只显示上次完成的对话" : "顶栏显示各状态的对话数")
+        VStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 14) {
+                option(true, "显示额度", sample == "idle" ? "空闲时显示各家额度条和重置时间" : "顶栏显示各家剩余额度和重置时间")
+                option(false, "不显示额度", sample == "idle" ? "空闲时只显示上次完成的对话" : "顶栏显示各状态的对话数")
+            }
+            Picker("示例", selection: $sample) {
+                Text("运行中").tag("list")
+                Text("空闲").tag("idle")
+            }
+            .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 200)
         }
-        .padding(12)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
         .onAppear(perform: render)
         .onChange(of: sample) { _, _ in render() }
@@ -158,7 +256,7 @@ private struct UsageChoice: View {
 
     private func render() {
         for on in [true, false] {
-            model.preview(sample: shown, config: ["show_usage": .bool(on)]) { frames[on] = $0 }
+            model.preview(sample: sample, config: ["show_usage": .bool(on)]) { frames[on] = $0 }
         }
     }
 }
@@ -184,10 +282,9 @@ private struct AliasField: View {
     }
 }
 
-/// Everything that decides when the screen changes, whether the board or the device holds the setting.
+/// When the screen changes: how often at most, whether other loop content may replace the board, and the quiet hours.
 struct RefreshPage: View {
     @ObservedObject var model: BoardModel
-    private let wake = [1, 5, 10, 15, 30, 60, 180, 360, 720]
 
     private var device: JSON? { model.device }
     private var ready: Bool { device?["ok"]?.bool == true }
@@ -196,46 +293,24 @@ struct RefreshPage: View {
         PageView(page: .refresh) {
             Banners(items: banners)
 
-            Card("刷新间隔") {
+            Card("屏幕更新") {
                 NumberRow(title: "插电时的最小间隔", detail: "有变化就刷新，两次之间至少隔这么久。整屏提醒不受限制",
                           value: model.settings.minPushIntervalSeconds, range: 3...600, unit: "秒") {
                     model.apply(["min_push_interval_seconds": JSON($0)])
                 }
                 if ready {
-                    let minutes = device?["battery_minutes"]?.int ?? 0
-                    Row("用电池时的刷新间隔", "设备平时休眠，每隔这么久醒来刷新一次。间隔越短越耗电") {
-                        Picker("用电池时的刷新间隔", selection: Binding(get: { minutes }, set: { model.saveDevice(["battery_minutes": JSON($0)], done: "已保存") })) {
-                            ForEach((wake.contains(minutes) ? wake : (wake + [minutes]).sorted()), id: \.self) {
-                                Text($0 < 60 ? "\($0) 分钟" : "\($0 / 60) 小时").tag($0)
-                            }
-                        }
-                        .labelsHidden().fixedSize()
-                    }
                     Row("始终显示状态牌", "设备循环列表里的其他内容不会替换状态牌",
                         isOn: Binding(get: { device?["keep"]?.bool ?? false }, set: { model.saveDevice(["keep": .bool($0)], done: $0 ? "已开启" : "已关闭") }))
                 }
+            } footer: {
+                Button("用电池时多久刷新一次、设备定时休眠，在「设备」里") { model.page = .device }.buttonStyle(.link)
             }
 
-            Card("夜间") {
+            Card("夜间免打扰") {
                 Row("夜间免打扰", "时段内屏幕显示“夜间免打扰”，停止刷新",
                     isOn: Binding(get: { model.settings.quietHours.enabled }, set: { model.apply(["quiet_hours": ["enabled": .bool($0)]]) }))
                 ClockRow(title: "开始时间", value: model.settings.quietHours.start) { model.apply(["quiet_hours": ["start": .string($0)]]) }
                 ClockRow(title: "结束时间", value: model.settings.quietHours.end) { model.apply(["quiet_hours": ["end": .string($0)]]) }
-            }
-
-            if ready, let sleep = device?["sleep"] {
-                Card("设备休眠") {
-                    Row("定时休眠", "时段内设备整机休眠，循环列表里的其他内容也不刷新",
-                        isOn: Binding(get: { sleep["enabled"]?.bool ?? false }, set: { saveSleep(sleep, "enabled", .bool($0)) }))
-                    ClockRow(title: "开始时间", value: sleep["start"]?.string ?? "23:00") { saveSleep(sleep, "start", .string($0)) }
-                    ClockRow(title: "结束时间", value: sleep["end"]?.string ?? "07:00") { saveSleep(sleep, "end", .string($0)) }
-                } footer: {
-                    Text("定时休眠按设备的时区（\(device?["timezone"]?.string ?? "未知")）计算。")
-                }
-            }
-
-            if device == nil {
-                Text("正在读取存在设备上的设置…").font(.system(size: 12)).foregroundStyle(.secondary)
             }
         }
         .disabled(model.busy)
@@ -244,35 +319,6 @@ struct RefreshPage: View {
 
     private var banners: [BannerItem] {
         guard let device = device, !ready, device["needs_setup"]?.bool != true else { return [] }
-        return [BannerItem(text: "连不上设备：\(device["error"]?.string ?? "")。存在设备上的几项设置暂时改不了。", actionTitle: "重试", action: model.loadDevice)]
-    }
-
-    private func saveSleep(_ current: JSON, _ key: String, _ value: JSON) {
-        var sleep = current.object ?? JSONObject()
-        sleep[key] = value
-        model.saveDevice(["sleep": .object(sleep)], done: "已保存")
-    }
-}
-
-struct AlertsPage: View {
-    @ObservedObject var model: BoardModel
-
-    var body: some View {
-        PageView(page: .alerts) {
-            Card("整屏提醒") {
-                takeover("permission", "等你批准时", "Agent 要执行需要授权的操作")
-                takeover("question", "等你回答时", "Agent 向你提问")
-                takeover("plan", "等你看计划时", "Agent 写好计划等你确认")
-            } footer: {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("整屏反色显示，并立即刷新。关闭的情况只在列表里显示成一行。")
-                    Button("夜间免打扰可以让屏幕在夜间停止刷新，在「刷新」里") { model.page = .refresh }.buttonStyle(.link)
-                }
-            }
-        }
-    }
-
-    private func takeover(_ kind: String, _ title: String, _ detail: String) -> some View {
-        Row(title, detail, isOn: Binding(get: { model.settings.takeover[kind] ?? true }, set: { model.apply(["takeover": [kind: .bool($0)]]) }))
+        return [BannerItem(text: "连不上设备：\(device["error"]?.string ?? "")。“始终显示状态牌”暂时改不了。", actionTitle: "重试", action: model.loadDevice)]
     }
 }

@@ -9,7 +9,7 @@ import SwiftUI
 typealias BoardSettings = BoardCore.Settings
 
 enum Page: String, CaseIterable, Identifiable {
-    case overview, display, refresh, alerts, agents, device, diagnostics, about, setup
+    case overview, display, alerts, conversations, usage, refresh, device, diagnostics, about, setup
 
     var id: String { rawValue }
 
@@ -17,9 +17,10 @@ enum Page: String, CaseIterable, Identifiable {
         switch self {
         case .overview: return "总览"
         case .display: return "画面"
-        case .refresh: return "刷新"
         case .alerts: return "提醒"
-        case .agents: return "Agent"
+        case .conversations: return "对话"
+        case .usage: return "用量"
+        case .refresh: return "刷新"
         case .device: return "设备"
         case .diagnostics: return "诊断"
         case .about: return "关于"
@@ -31,11 +32,12 @@ enum Page: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .overview: return "屏幕上现在是什么，各个 Agent 在做什么"
-        case .display: return "屏幕上显示哪些内容，用什么字体"
-        case .refresh: return "屏幕什么时候更新，什么时候不更新"
+        case .display: return "屏幕长什么样：字体、名称、行数"
         case .alerts: return "哪些情况占用整块屏幕来提醒你"
-        case .agents: return "状态牌显示哪些 Agent 的对话"
-        case .device: return "正在使用的 Quote/0"
+        case .conversations: return "显示哪些 Agent、哪些项目的对话，显示多久"
+        case .usage: return "Claude 和 Codex 还剩多少额度，要不要显示在屏幕上"
+        case .refresh: return "屏幕什么时候更新，什么时候不更新"
+        case .device: return "正在使用的 Quote/0：状态、供电和休眠"
         case .diagnostics: return "从钩子到屏幕逐项检查，查看日志"
         case .about: return "版本、图标、文件位置和卸载"
         case .setup: return "三步把状态牌连到你的 Quote/0"
@@ -47,9 +49,10 @@ enum Page: String, CaseIterable, Identifiable {
         switch self {
         case .overview: return .dashboardSquare01
         case .display: return .listView
-        case .refresh: return .refresh
         case .alerts: return .notification01
-        case .agents: return .commandLine
+        case .conversations: return .bubbleChat
+        case .usage: return .dashboardSpeed01
+        case .refresh: return .refresh
         case .device, .setup: return .tabletConnectedWifi
         case .diagnostics: return .pulse01
         case .about: return .informationCircle
@@ -62,6 +65,7 @@ struct BoardStatus {
     var sessions: [Session] = []
     var lastPush: Engine.LastPush?
     var usage: Usage?
+    var screen = Engine.ScreenState.current
     var quiet = false
     var paused = false
     var needsSetup = false
@@ -111,7 +115,7 @@ final class BoardModel: ObservableObject {
         let (settings, status): (BoardSettings, BoardStatus) = engine.locked {
             let settings = engine.settings
             return (settings, BoardStatus(sessions: engine.board.visible(), lastPush: engine.lastPush, usage: engine.usage,
-                                          quiet: engine.currentView().kind == .quiet && !settings.paused, paused: settings.paused,
+                                          screen: engine.screenState(), quiet: engine.currentView().kind == .quiet && !settings.paused, paused: settings.paused,
                                           needsSetup: !engine.dryRun && !settings.ready, dryRun: engine.dryRun))
         }
         self.settings = settings
@@ -150,7 +154,8 @@ final class BoardModel: ObservableObject {
     func apply(_ patch: JSON, quietly: Bool = false) {
         do {
             _ = try console.saveSettings(patch)
-            if !quietly { say("已保存") }
+            refresh()
+            if !quietly { say(screenLine(saved: true)) }
         } catch {
             say((error as? Problem)?.message ?? describe(error), isError: true)
         }
@@ -172,7 +177,23 @@ final class BoardModel: ObservableObject {
 
     func refreshScreen() {
         engine.forceRefresh()
-        say("正在刷新屏幕")
+        say(status.lastPush?.delivered == false ? "已发出，设备休眠中，醒来后显示" : "正在刷新屏幕")
+    }
+
+    /// What the screen is doing, in a few words; after a change, also that it was saved.
+    func screenLine(saved: Bool = false) -> String {
+        let prefix = saved ? "已保存，" : ""
+        if status.needsSetup { return saved ? "已保存" : "还没有连接设备" }
+        if status.dryRun { return saved ? "已保存" : "空跑模式，不发到屏幕" }
+        switch status.screen {
+        case .current: return saved ? "已保存" : "屏幕已是最新"
+        case .failed: return prefix + "刷新失败，稍后自动重试"
+        case .waitingForDevice: return prefix + "设备休眠中，醒来后显示"
+        case .sending(let at):
+            let wait = Int((at - Date().timeIntervalSince1970).rounded(.up))
+            if status.lastPush?.delivered == false { return prefix + "设备休眠中，醒来后显示" }
+            return prefix + (wait <= 3 ? "屏幕马上更新" : "屏幕 \(wait) 秒后更新")
+        }
     }
 
     func sendTestFrame() {

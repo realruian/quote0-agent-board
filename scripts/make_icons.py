@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "app" / "Sources" / "AgentBoard" / "UI" / "Icons.swift"
 NAMES = [
     "DashboardSquare01", "ListView", "Refresh", "Notification01", "CommandLine", "TabletConnectedWifi", "Pulse01", "InformationCircle",
-    "Alert02", "CheckmarkCircle02", "CancelCircle", "ArrowUpRight01", "Folder01", "Tick02",
+    "Alert02", "CheckmarkCircle02", "CancelCircle", "ArrowUpRight01", "Folder01", "Tick02", "BubbleChat", "DashboardSpeed01",
 ]
 ATTRIBUTES = {"strokeLinecap": "stroke-linecap", "strokeLinejoin": "stroke-linejoin", "strokeWidth": "stroke-width",
               "fillRule": "fill-rule", "clipRule": "clip-rule"}

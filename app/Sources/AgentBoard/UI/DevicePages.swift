@@ -1,51 +1,12 @@
-// The pages about the two ends of the chain: the agents the board listens to, and the device it draws on.
+// The pages about the device the board draws on: the one in use, and connecting one.
 
 import BoardCore
 import SwiftUI
 
-struct AgentsPage: View {
-    @ObservedObject var model: BoardModel
-
-    var body: some View {
-        PageView(page: .agents) {
-            if let data = model.integrations {
-                Banners(items: data["hook_installed"]?.bool == true ? [] : [BannerItem(text: "没有找到钩子脚本，重新打开一次 App 可以装回来。")])
-                agent("claude", "Claude Code", data["claude"], note: nil)
-                agent("codex", "Codex", data["codex"], note: "连接后，Codex 下次启动会要求你确认信任新钩子，确认后才生效。")
-                Text("开关会修改对应 Agent 的全局配置文件，修改前会备份，不改动其他工具的配置。只对之后新开的对话生效。")
-                    .font(.system(size: 12)).foregroundStyle(.secondary).padding(.leading, 2)
-            }
-        }
-        .onAppear(perform: model.loadIntegrations)
-    }
-
-    private func agent(_ id: String, _ name: String, _ state: JSON?, note: String?) -> some View {
-        let exists = state?["exists"]?.bool == true
-        let installed = state?["installed"]?.int ?? 0, expected = state?["expected"]?.int ?? 0
-        let on = installed > 0, full = installed == expected
-        let status: String = {
-            if !exists { return "没有找到它的配置文件，可能没装" }
-            if let error = state?["error"]?.string { return error }
-            if full { return "已连接" }
-            return on ? "连接不完整（\(installed)/\(expected)），关掉再打开可以修复" : "未连接"
-        }()
-        return Card {
-            Row(name, status, health: !exists ? .unknown : full ? .good : on ? .attention : .unknown,
-                isOn: Binding(get: { on }, set: { model.connect(id, name, $0) }))
-                .disabled(!exists)
-            Row("配置文件", value: state?["path"]?.string ?? "")
-            if let others = state?["vibe_island"]?.int, others > 0 {
-                Row("Vibe Island", value: "检测到它的 \(others) 个钩子，互不影响")
-            }
-        } footer: {
-            if let note = note { Text(note) }
-        }
-    }
-}
-
 struct DevicePage: View {
     @ObservedObject var model: BoardModel
     @State private var alias = ""
+    private let wake = [1, 5, 10, 15, 30, 60, 180, 360, 720]
 
     var body: some View {
         PageView(page: .device) {
@@ -86,8 +47,7 @@ struct DevicePage: View {
             items.append(BannerItem(text: "设备的循环列表里没有“图像 API”，状态牌显示不出来。请在 Dot. App 的内容工坊里添加。"))
         }
         if device["asleep"]?.bool == true {
-            items.append(BannerItem(text: "设备休眠中，每 \(device["battery_minutes"]?.int ?? 0) 分钟醒来刷新一次。接上电源后有变化就刷新。",
-                                    actionTitle: "更改刷新间隔") { model.page = .refresh })
+            items.append(BannerItem(text: "设备休眠中，每 \(device["battery_minutes"]?.int ?? 0) 分钟醒来刷新一次。接上电源后有变化就刷新。"))
         }
         return items
     }
@@ -96,6 +56,36 @@ struct DevicePage: View {
     private func connected(_ device: JSON) -> some View {
         let status = device["status"]
         let asleep = device["asleep"]?.bool == true
+        Card("状态") {
+            Row("当前状态", health: asleep ? .attention : .good, value: status?["current"]?.string ?? "未知")
+            Row("供电", value: status?["battery"]?.string ?? "未知")
+            Row("Wi-Fi 信号", value: status?["wifi"]?.string ?? "未知")
+            Row("上次刷新", value: (device["last_render"]?.string).flatMap { $0.isEmpty ? nil : $0 } ?? "未知")
+            Row("发送测试画面", "屏幕四角各有一个黑块，15 秒后自动恢复。用来确认设备收得到、画面没被裁掉") {
+                Button("发送", action: model.sendTestFrame)
+            }
+        }
+        Card("用电池时") {
+            let minutes = device["battery_minutes"]?.int ?? 0
+            Row("刷新间隔", "设备平时休眠，每隔这么久醒来刷新一次。间隔越短越耗电。接上电源后有变化就刷新") {
+                Picker("用电池时的刷新间隔", selection: Binding(get: { minutes }, set: { model.saveDevice(["battery_minutes": JSON($0)], done: "已保存") })) {
+                    ForEach((wake.contains(minutes) ? wake : (wake + [minutes]).sorted()), id: \.self) {
+                        Text($0 < 60 ? "\($0) 分钟" : "\($0 / 60) 小时").tag($0)
+                    }
+                }
+                .labelsHidden().fixedSize()
+            }
+        }
+        if let sleep = device["sleep"] {
+            Card("定时休眠") {
+                Row("定时休眠", "时段内设备整机休眠，循环列表里的其他内容也不刷新",
+                    isOn: Binding(get: { sleep["enabled"]?.bool ?? false }, set: { saveSleep(sleep, "enabled", .bool($0)) }))
+                ClockRow(title: "开始时间", value: sleep["start"]?.string ?? "23:00") { saveSleep(sleep, "start", .string($0)) }
+                ClockRow(title: "结束时间", value: sleep["end"]?.string ?? "07:00") { saveSleep(sleep, "end", .string($0)) }
+            } footer: {
+                Text("按设备的时区（\(device["timezone"]?.string ?? "未知")）计算。只想让状态牌夜里不刷新、设备照常工作，用「刷新」里的夜间免打扰。")
+            }
+        }
         Card("名称") {
             Row("设备名称", "显示在 Dot. App 里") {
                 HStack {
@@ -104,21 +94,21 @@ struct DevicePage: View {
                 }
             }
         }
-        Card("状态") {
-            Row("当前状态", health: asleep ? .attention : .good, value: status?["current"]?.string ?? "未知")
-            Row("供电", value: status?["battery"]?.string ?? "未知")
-            Row("Wi-Fi 信号", value: status?["wifi"]?.string ?? "未知")
-            Row("上次刷新", value: (device["last_render"]?.string).flatMap { $0.isEmpty ? nil : $0 } ?? "未知")
-        }
         Card("信息") {
             Row("固件版本", value: status?["version"]?.string ?? "未知")
             Row("时区", value: (device["timezone"]?.string).flatMap { $0.isEmpty ? nil : $0 } ?? "未知")
             Row("设备序列号", value: device["device_id"]?.string ?? "")
             Row("API 密钥", value: device["key"]?["looks_valid"]?.bool == true ? "有效" : "格式不对")
-            Row("更换密钥或设备", "刷新间隔和休眠时段在「刷新」里") {
+            Row("更换密钥或设备") {
                 Button("更换…") { model.page = .setup }
             }
         }
+    }
+
+    private func saveSleep(_ current: JSON, _ key: String, _ value: JSON) {
+        var sleep = current.object ?? JSONObject()
+        sleep[key] = value
+        model.saveDevice(["sleep": .object(sleep)], done: "已保存")
     }
 }
 

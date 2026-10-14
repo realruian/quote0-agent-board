@@ -261,6 +261,24 @@ public final class Engine {
         (try? Data(contentsOf: Paths.frame)) ?? render(currentView()).png
     }
 
+    /// Where the screen stands against what the board has to show.
+    public enum ScreenState: Equatable {
+        case current  // showing the latest frame
+        case sending(at: Double)  // a newer frame goes out at about this time
+        case waitingForDevice  // sent, but the device is asleep or offline and shows it when it wakes
+        case failed(String)  // the last send failed; it is tried again
+    }
+
+    public func screenState(now: Double = Date().timeIntervalSince1970) -> ScreenState {
+        locked {
+            if let push = lastPush, !push.ok { return .failed(push.message) }
+            if currentView(now: now).signature != lastSig {
+                return .sending(at: max(now, lastPushAt + Double(settings.minPushIntervalSeconds)))
+            }
+            return lastPush?.delivered == false ? .waitingForDevice : .current
+        }
+    }
+
     // MARK: pushing
 
     /// Let a burst of events land. Ordinary changes also keep their distance from the

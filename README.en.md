@@ -131,7 +131,7 @@ The first time it opens, the app does the following, backing up every file it ed
 4. Has itself open at login (LaunchAgent `com.quote0.agent-board.menubar`).
 5. Takes over from the Python version's daemon if that was installed. Settings and hooks are shared, so nothing needs setting up again.
 
-Hooks only apply to conversations started after installation. To leave an agent unconnected, disconnect it on the window's Agent page.
+Hooks only apply to conversations started after installation. To leave an agent unconnected, disconnect it on the window's 对话 (Conversations) page.
 
 ### 3. Connect the device in the window that opens
 
@@ -176,18 +176,21 @@ The two icons are independent. With both off the board keeps working in the back
 
 Settings are in the app's window: click the Dock icon, or choose "打开设置…" from the menu bar icon.
 
-<img src="docs/images/settings.png" width="735" alt="The settings window">
+<img src="docs/images/settings.png" width="760" alt="The settings window">
 
 | Page | What you can do |
 |---|---|
-| 总览 Overview | See the current frame, whether the screen and the device are fine, quota left and the active conversations; refresh the screen or send a test frame |
-| 画面 Screen | What the screen shows: font, conversation names and quota, number of rows, how long conversations stay, project aliases and hidden projects |
-| 刷新 Refresh | When the screen updates: the minimum interval on power, the refresh interval on battery, whether the board always stays on screen, quiet hours, the device's scheduled sleep |
-| 提醒 Alerts | Which situations take over the screen |
-| Agent | Connect or disconnect Claude Code and Codex separately |
-| 设备 Device | Status, power, signal and firmware; device name |
+| 总览 Overview | See the current frame, whether the screen and the device are fine, and the active conversations; refresh the screen |
+| 画面 Screen | How the screen looks: font, conversation names, number of rows, the last finished conversation when idle |
+| 提醒 Alerts | Which situations take over the screen, and whether the alert names the tool to approve |
+| 对话 Conversations | Connect or disconnect Claude Code and Codex, how long conversations stay, project aliases and hidden projects |
+| 用量 Usage | Whether the screen shows quota (both looks previewed side by side), and the current readings for Claude and Codex |
+| 刷新 Refresh | When the screen updates: the minimum interval on power, whether the board always stays on screen, quiet hours |
+| 设备 Device | Status, power, signal and firmware; send a test frame; the refresh interval on battery and scheduled sleep; device name |
 | 诊断 Diagnostics | One-click self-check, log viewer |
 | 关于 About | Version and file locations; whether to keep the menu bar icon and the Dock icon; uninstall |
+
+On the Screen and Alerts pages the preview stays pinned at the top, so a change further down shows at once. Changes save themselves and reach the screen within seconds. The bottom left of the window always says where the screen stands (up to date, updating in a few seconds, device asleep), with a button beside it to refresh the screen.
 
 Changes are saved automatically and take effect at once. They are stored in `~/.quote0-agent-board/config.json`.
 
@@ -197,7 +200,7 @@ Only fonts present on the machine are offered: PingFang (default), MiSans, Hirag
 
 Quota comes from Codex and Claude Code themselves. The project does not log in to any account and does not read any credentials.
 
-To leave quota off the screen, pick 不显示额度 (no quota) under 剩余额度 on the 画面 page, where both looks are previewed side by side. The top bar then counts conversations by state, the idle screen shows only the last finished conversation, and the app stops reading quota.
+To leave quota off the screen, pick 不显示额度 (no quota) on the 用量 (Usage) page, where both looks are previewed side by side. The top bar then counts conversations by state, the idle screen shows only the last finished conversation, and the app stops reading quota.
 
 | | Source | Trusted for |
 |---|---|---|
@@ -257,7 +260,7 @@ To uninstall: choose 卸载… from the app's menu at the top of the screen, or 
 - **"Waiting for approval" lingers after you approve**: agent hooks have no "user approved" event, so the board only returns to running when that command finishes. Long commands are misreported meanwhile.
 - **Interrupting with Esc takes a moment to show**: an interrupt fires no end event. Every half minute the app looks at the agent's own record of the conversation and recognises the interrupt there, so the row can be up to half a minute late. An interrupted conversation is shown as finished, like one that completed.
 - **No full-screen alert for errors or completion**: only approvals, questions and plans take over the screen.
-- **The device must be plugged in**: on battery it sleeps and only updates at the moment of each scheduled wake-up, so the screen stays on the frame from before it slept. The Overview and Device pages of the window then say the device is asleep (the interval can be changed on the Refresh page, one minute at the shortest); once the device wakes, the latest frame is sent again automatically.
+- **The device must be plugged in**: on battery it sleeps and only updates at the moment of each scheduled wake-up, so the screen stays on the frame from before it slept. The Overview and Device pages of the window then say the device is asleep (the interval can be changed on the Device page, one minute at the shortest); once the device wakes, the latest frame is sent again automatically.
 - **Depends on MindReset's cloud service**: when your computer is offline or the service is unavailable, the screen stays on its last frame.
 - **Chinese only**: both the app's window and the text on the screen.
 - **Used long-term on the author's own setup only**: Quote/0 firmware 2.0.8 with the Claude and Codex desktop apps.

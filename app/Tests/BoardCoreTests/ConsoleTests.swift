@@ -248,4 +248,18 @@ final class ConsoleTests: BoardTestCase {
         XCTAssertFalse(names.isEmpty)
         XCTAssertFalse(names.contains { $0.contains("额度") })
     }
+
+    func testScreenStateSaysWhetherTheScreenIsBehind() {
+        let now = Date().timeIntervalSince1970
+        engine.lastSig = ""
+        engine.lastPushAt = now - 3
+        guard case .sending(let at) = engine.screenState(now: now) else { return XCTFail("a frame not sent yet is on its way") }
+        XCTAssertEqual(at, now - 3 + Double(engine.settings.minPushIntervalSeconds), accuracy: 0.01)  // kept apart from the last one
+        engine.lastSig = engine.currentView(now: now).signature
+        XCTAssertEqual(engine.screenState(now: now), .current)
+        engine.locked { engine.setLastPush(Engine.LastPush(at: now, ok: true, kind: "list", message: "休眠", delivered: false)) }
+        XCTAssertEqual(engine.screenState(now: now), .waitingForDevice)
+        engine.locked { engine.setLastPush(Engine.LastPush(at: now, ok: false, kind: "list", message: "断网", delivered: nil)) }
+        XCTAssertEqual(engine.screenState(now: now), .failed("断网"))
+    }
 }

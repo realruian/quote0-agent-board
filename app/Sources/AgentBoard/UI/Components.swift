@@ -74,6 +74,46 @@ struct ScreenView: View {
     }
 }
 
+/// The screen as it would look with the settings as they are, beside a choice of what it shows:
+/// made-up examples, or the board as it stands. Drawn again whenever a setting changes.
+struct ScreenPreview: View {
+    @ObservedObject var model: BoardModel
+    let samples: [(key: String, label: String)]
+    @State private var sample: String
+    @State private var image: NSImage?
+
+    init(model: BoardModel, samples: [(key: String, label: String)]) {
+        self.model = model
+        self.samples = samples
+        _sample = State(initialValue: samples.first?.key ?? "live")
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 22) {
+            ScreenView(image: image, maxWidth: 300)
+            VStack(alignment: .leading, spacing: 10) {
+                if samples.count > 1 {
+                    Picker("示例", selection: $sample) {
+                        ForEach(samples, id: \.key) { Text($0.label).tag($0.key) }
+                    }
+                    .pickerStyle(.radioGroup).labelsHidden()
+                }
+                Text(sample == "live" ? "按现在的对话画出，不会发到屏幕上" : "演示数据，不会发到屏幕上")
+                    .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onAppear(perform: render)
+        .onChange(of: sample) { _, _ in render() }
+        .onChange(of: model.settings) { _, _ in render() }
+        .onChange(of: model.status.lastPush?.at) { _, _ in if sample == "live" { render() } }
+    }
+
+    private func render() {
+        model.preview(sample: sample) { image = $0 }
+    }
+}
+
 /// How much of something is left, as a short bar and the figure. It turns orange when little is.
 struct Meter: View {
     let label: String

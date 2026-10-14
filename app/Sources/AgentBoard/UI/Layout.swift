@@ -25,36 +25,75 @@ extension Color {
 }
 
 /// A page: its name and what it is for, then its groups, in a column that stays readable in a wide window.
-struct PageView<Content: View>: View {
+/// What is `pinned` stays at the top while the groups scroll under it: the screen's preview, so a
+/// change made far down the page is seen at once.
+struct PageView<Pinned: View, Content: View>: View {
     let page: Page
+    @ViewBuilder var pinned: Pinned
     @ViewBuilder var content: Content
+
+    init(page: Page, @ViewBuilder pinned: () -> Pinned, @ViewBuilder content: () -> Content) {
+        self.page = page
+        self.pinned = pinned()
+        self.content = content()
+    }
 
     /// How much of the page is under the window's bar: the bar is 52 high and the page starts 8 down.
     private static var bar: CGFloat { 44 }
+    private var hasPinned: Bool { Pinned.self != EmptyView.self }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(page.title).font(.system(size: 22, weight: .semibold))
-                    Text(page.summary).foregroundStyle(.secondary)
+        if hasPinned {
+            VStack(spacing: 0) {
+                column {
+                    heading
+                    pinned
                 }
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isHeader)
-                content
+                .padding(.top, PageView.bar)
+                .padding(.bottom, 16)
+                Rectangle().fill(Tone.line).frame(height: 1)
+                ScrollView {
+                    column { content }.padding(.top, 22).padding(.bottom, 44)
+                }
             }
+        } else {
+            ScrollView {
+                column {
+                    heading
+                    content
+                }
+                .padding(.top, PageView.bar)
+                .padding(.bottom, 44)
+            }
+            // The window's bar lies over the top of the page and takes the clicks there, so what scrolls
+            // under it fades out rather than staying in view where it cannot be pressed.
+            .overlay(alignment: .top) {
+                LinearGradient(stops: [.init(color: Tone.paper, location: 0.35), .init(color: Tone.paper.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: PageView.bar).allowsHitTesting(false)
+            }
+        }
+    }
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(page.title).font(.system(size: 22, weight: .semibold))
+            Text(page.summary).foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func column<Inner: View>(@ViewBuilder _ inner: () -> Inner) -> some View {
+        VStack(alignment: .leading, spacing: 26) { inner() }
             .frame(maxWidth: 660, alignment: .leading)
             .padding(.horizontal, 36)
-            .padding(.top, PageView.bar)
-            .padding(.bottom, 44)
             .frame(maxWidth: .infinity)
-        }
-        // The window's bar lies over the top of the page and takes the clicks there, so what scrolls
-        // under it fades out rather than staying in view where it cannot be pressed.
-        .overlay(alignment: .top) {
-            LinearGradient(stops: [.init(color: Tone.paper, location: 0.35), .init(color: Tone.paper.opacity(0), location: 1)], startPoint: .top, endPoint: .bottom)
-                .frame(height: PageView.bar).allowsHitTesting(false)
-        }
+    }
+}
+
+extension PageView where Pinned == EmptyView {
+    init(page: Page, @ViewBuilder content: () -> Content) {
+        self.init(page: page, pinned: { EmptyView() }, content: content)
     }
 }
 

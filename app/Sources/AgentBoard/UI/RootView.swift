@@ -38,7 +38,8 @@ struct RootView: View {
         case .display: DisplayPage(model: model)
         case .refresh: RefreshPage(model: model)
         case .alerts: AlertsPage(model: model)
-        case .agents: AgentsPage(model: model)
+        case .conversations: ConversationsPage(model: model)
+        case .usage: UsagePage(model: model)
         case .device: DevicePage(model: model)
         case .diagnostics: DiagnosticsPage(model: model)
         case .about: AboutPage(model: model)
@@ -52,7 +53,7 @@ struct RootView: View {
 /// and the row blinked each time a page took the keyboard back from it.
 private struct Sidebar: View {
     @ObservedObject var model: BoardModel
-    private let pages: [Page] = [.overview, .display, .refresh, .alerts, .agents, .device]
+    private let pages: [Page] = [.overview, .display, .alerts, .conversations, .usage, .refresh, .device]
     private let advanced: [Page] = [.diagnostics, .about]
 
     /// Connecting a device is reached from the device page, so that is the row it belongs to.
@@ -65,15 +66,7 @@ private struct Sidebar: View {
                 .padding(.leading, 10).padding(.top, 18).padding(.bottom, 4)
             ForEach(advanced) { row($0) }
             Spacer(minLength: 12)
-            HStack(spacing: 7) {
-                Dot(health: state.0)
-                Text(state.1).foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                Text("v\(model.console.version)").foregroundStyle(.tertiary)
-            }
-            .font(.system(size: 11))
-            .lineLimit(1)
-            .padding(.horizontal, 10)
+            ScreenStatus(model: model)
         }
         .padding(.horizontal, 10)
         .padding(.top, 52)  // clear of the window's three buttons
@@ -87,13 +80,56 @@ private struct Sidebar: View {
             .keyboardShortcut(KeyEquivalent(Character("\(number)")), modifiers: .command)
     }
 
-    private var state: (Health, String) {
+}
+
+/// At the foot of the sidebar, on every page: what the screen is doing, and the one thing to do about it.
+private struct ScreenStatus: View {
+    @ObservedObject var model: BoardModel
+
+    var body: some View {
         let status = model.status
-        if status.needsSetup { return (.attention, "还没有连接设备") }
-        if status.paused { return (.attention, "已暂停") }
-        if let push = status.lastPush, !push.ok { return (.bad, "刷新失败") }
-        if status.quiet { return (.attention, "夜间免打扰") }
-        return (.good, status.dryRun ? "空跑模式" : "运行中")
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
+                    Dot(health: health)
+                    Text(headline).foregroundStyle(.primary)
+                }
+                Text("v\(model.console.version)").foregroundStyle(.tertiary).padding(.leading, 14)
+            }
+            .font(.system(size: 11))
+            .lineLimit(1)
+            Spacer(minLength: 4)
+            if status.paused {
+                Button("恢复") { model.apply(["paused": false], quietly: true) }.controlSize(.small)
+            } else if status.needsSetup {
+                Button("连接") { model.page = .setup }.controlSize(.small)
+            } else {
+                Button(action: model.refreshScreen) { IconView(.refresh, size: 14) }
+                    .buttonStyle(.borderless).foregroundStyle(.secondary)
+                    .help("刷新屏幕（⌘R）").accessibilityLabel("刷新屏幕")
+                    .disabled(status.dryRun)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var headline: String {
+        if model.status.paused { return "已暂停，屏幕不更新" }
+        if model.status.quiet { return "夜间免打扰中" }
+        return model.screenLine()
+    }
+
+    private var health: Health {
+        let status = model.status
+        if status.needsSetup || status.paused || status.quiet { return .attention }
+        switch status.screen {
+        case .failed: return .bad
+        case .waitingForDevice: return .attention
+        case .sending: return status.lastPush?.delivered == false ? .attention : .good
+        case .current: return .good
+        }
     }
 }
 
