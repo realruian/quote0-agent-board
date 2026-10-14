@@ -54,7 +54,7 @@ def run(*command: str) -> str:
 
 def compile_app() -> Path:
     """The release binary: for both processor families, or for this machine's when that is all the toolchain does."""
-    build = ["swift", "build", "-c", "release", "--package-path", str(ROOT / "app")]
+    build = ["swift", "build", "-c", "release", "--package-path", str(ROOT / "app"), "--product", "AgentBoard"]
     both = ["--arch", "arm64", "--arch", "x86_64"]
     if subprocess.run([*build, *both], capture_output=True).returncode == 0:
         return Path(run(*build, *both, "--show-bin-path")) / "AgentBoard"

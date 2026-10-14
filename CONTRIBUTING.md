@@ -66,7 +66,7 @@ AGENT_BOARD_HOME="$PWD/.dev-home" AGENT_BOARD_DRY_RUN=1 AGENT_BOARD_PORT=8766 py
 
 - App 只用系统自带的框架，Python 版运行时只依赖标准库和 Pillow，请不要引入新的依赖。
 - 改了行为就补测试。测试不访问网络，也不读写真实的用户目录。
-- 改了画面就重新生成 README 里的示例图：`python3 scripts/render_samples.py`。
+- 改了画面就重新生成 README 里的示例图：`python3 scripts/render_samples.py`。它用 App 自己的渲染器出图（`app/Sources/RenderSamples`），需要 Swift 工具链和 Pillow。
 - 不引入 Xcode 工程，用 Swift Package 构建。App 的图标由 `python3 scripts/make_app_icon.py` 生成。
 - 示例图和测试数据里不要出现真实的对话名称、路径或设备序列号。
 - 屏幕是纯黑白的，文字和图标不做抗锯齿；新增的画面元素请对齐 `Render.swift` 开头定义的网格。

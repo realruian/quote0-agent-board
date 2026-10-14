@@ -3,37 +3,29 @@
 
     python3 scripts/render_samples.py
 
-Everything shown is made up (see sample_board in agent_board/render.py), so the
-pictures never contain anything from the machine they were rendered on.
+The frames come from the app's own renderer (app/Sources/RenderSamples), so they
+match the screen dot for dot; this script only enlarges them and puts them in a
+bezel. Everything shown is made up (see sampleBoard in app/Sources/BoardCore/View.swift),
+so the pictures never contain anything from the machine they were rendered on.
+Needs the Swift toolchain and Pillow.
 """
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
-from agent_board.render import build_view, render, sample_board  # noqa: E402
-from agent_board.usage import FIVE_HOUR, SEVEN_DAY  # noqa: E402
-
 SCALE = 3  # whole multiples only: the frame is 1-bit and must stay sharp
 BEZEL = 18
 BEZEL_COLOUR = (28, 28, 30)
 NOW = time.mktime((2026, 10, 8, 10, 12, 0, 0, 0, -1))  # a Thursday morning
-
-
-def usage() -> dict:
-    hour, day = 3600, 86400
-    return {
-        "claude": {"windows": {FIVE_HOUR: {"left": 36, "resets_at": NOW + 4.3 * hour},
-                               SEVEN_DAY: {"left": 73, "resets_at": NOW + 2 * day}}},
-        "codex": {"windows": {SEVEN_DAY: {"left": 95, "resets_at": NOW + 5 * day}}},
-    }
 
 
 def framed(frame: Image.Image) -> Image.Image:
@@ -47,11 +39,17 @@ def framed(frame: Image.Image) -> Image.Image:
 def main() -> None:
     out = ROOT / "docs" / "images"
     out.mkdir(parents=True, exist_ok=True)
-    for kind in ("list", "wait", "idle"):
-        view = build_view(sample_board(kind, NOW), NOW, None, usage())
-        path = out / f"{kind}.png"
-        framed(render(view)).save(path, optimize=True)
-        print(path.relative_to(ROOT))
+    with tempfile.TemporaryDirectory() as tmp:
+        # the fonts the app ships, from the repository
+        environment = {**os.environ, "AGENT_BOARD_RESOURCES": str(ROOT / "agent_board")}
+        result = subprocess.run(["swift", "run", "--package-path", str(ROOT / "app"), "RenderSamples", tmp, str(NOW)],
+                                env=environment, capture_output=True, text=True)
+        if result.returncode:
+            sys.exit(result.stdout + result.stderr)
+        for kind in ("list", "wait", "idle"):
+            path = out / f"{kind}.png"
+            framed(Image.open(Path(tmp) / f"{kind}.png")).save(path, optimize=True)
+            print(path.relative_to(ROOT))
 
 
 if __name__ == "__main__":

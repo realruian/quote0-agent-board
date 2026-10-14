@@ -10,6 +10,7 @@ let package = Package(
     targets: [
         .target(name: "BoardCore"),
         .executableTarget(name: "AgentBoard", dependencies: ["BoardCore"]),
+        .executableTarget(name: "RenderSamples", dependencies: ["BoardCore"]),  // the README's pictures
         .testTarget(name: "BoardCoreTests", dependencies: ["BoardCore"]),
     ]
 )
